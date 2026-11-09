@@ -1,0 +1,384 @@
+﻿@page "/admin/pedidos"
+
+@using System.Globalization
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Gestión de pedidos | Euphoria Essence</PageTitle>
+
+<section class="admin-page">
+    <header>
+        <a href="perfil">‹ Mi perfil</a>
+        <h1>Euphoria Essence</h1>
+        <h2>Gestión de pedidos</h2>
+    </header>
+
+    @if (!Sesion.EstaLogueado)
+    {
+        <p>Iniciá sesión para continuar.</p>
+        <a class="boton" href="login">Iniciar sesión</a>
+    }
+    else if (Sesion.Usuario?.Rol != "Administrador")
+    {
+        <p role="alert">Esta sección es exclusiva del administrador.</p>
+        <a class="boton" href="catalogo">Volver al catálogo</a>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(exito))
+        {
+            <div class="notificacion" role="status">@exito</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="error" role="alert">@error</div>
+        }
+
+        <button class="boton actualizar"
+                disabled="@(cargando || guardando)"
+                @onclick="CargarAsync">
+            Actualizar pedidos
+        </button>
+
+        @if (cargando)
+        {
+            <p class="estado" role="status">Cargando pedidos...</p>
+        }
+        else if (listado is not null)
+        {
+            @if (listado.Items.Count == 0)
+            {
+                <p class="estado">No hay pedidos en esta página.</p>
+            }
+
+            @foreach (var pedido in listado.Items)
+            {
+                var siguiente = SiguienteEstado(pedido.Estado);
+
+                <article class="pedido" @key="pedido.IdPedido">
+                    <div class="fila">
+                        <h3>Pedido #@pedido.IdPedido</h3>
+                        <strong>@Moneda(pedido.Total)</strong>
+                    </div>
+
+                    <p class="estado-pedido">@pedido.Estado</p>
+                    <p><strong>Cliente:</strong> @pedido.Cliente</p>
+                    <p><strong>Fecha:</strong> @Fecha(pedido.FechaPedido)</p>
+                    <p class="direccion">
+                        <strong>Entrega:</strong> @pedido.DireccionEnvio
+                    </p>
+                    <a class="boton ver-detalle"
+                       href="@($"admin/pedidos/{pedido.IdPedido}")">
+                        Ver detalles
+                    </a>
+                    @if (siguiente is not null)
+                    {
+                        <button class="boton"
+                                disabled="@guardando"
+                                @onclick="() => PedirConfirmacion(pedido)">
+                            Pasar a “@siguiente.NombreEstado”
+                        </button>
+                    }
+                    else if (pedido.Estado == "Entregado")
+                    {
+                        <p class="finalizado">Pedido entregado</p>
+                    }
+                    else
+                    {
+                        <p class="aviso">
+                            No está configurado el siguiente estado.
+                        </p>
+                    }
+                </article>
+            }
+
+            @if (listado.TotalPaginas > 1)
+            {
+                <div class="paginacion">
+                    <button disabled="@(guardando || pagina <= 1)"
+                            @onclick="AnteriorAsync">
+                        Anterior
+                    </button>
+
+                    <span>@listado.Pagina / @listado.TotalPaginas</span>
+
+                    <button disabled="@(guardando || pagina >= listado.TotalPaginas)"
+                            @onclick="SiguienteAsync">
+                        Siguiente
+                    </button>
+                </div>
+            }
+        }
+    }
+
+    @if (pedidoSeleccionado is not null && estadoSeleccionado is not null)
+    {
+        <div class="fondo-dialogo">
+            <section class="dialogo"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="confirmar-estado">
+                <h3 id="confirmar-estado">Confirmar cambio de estado</h3>
+
+                <p>Pedido #@pedidoSeleccionado.IdPedido</p>
+                <p>
+                    @pedidoSeleccionado.Estado
+                    → @estadoSeleccionado.NombreEstado
+                </p>
+
+                <div class="botones-dialogo">
+                    <button class="boton" @onclick="Cancelar">
+                        Cancelar
+                    </button>
+                    <button class="boton" @onclick="GuardarAsync">
+                        Confirmar
+                    </button>
+                </div>
+            </section>
+        </div>
+    }
+</section>
+
+@code {
+    private static readonly string[] flujo =
+    {
+        "Aprobado",
+        "Preparando pedido",
+        "Despachado",
+        "En camino",
+        "Llegó a sucursal",
+        "Entregado"
+    };
+
+    private readonly CultureInfo cultura =
+        CultureInfo.GetCultureInfo("es-AR");
+
+    private PaginaAdminPedidos? listado;
+    private List<EstadoPedidoOpcion> estados = new();
+    private AdminPedidoResumen? pedidoSeleccionado;
+    private EstadoPedidoOpcion? estadoSeleccionado;
+    private int pagina = 1;
+    private bool cargando;
+    private bool guardando;
+    private string? error;
+    private string? exito;
+
+    protected override Task OnInitializedAsync() => CargarAsync();
+
+    private bool TieneAcceso =>
+        Sesion.EstaLogueado &&
+        Sesion.Usuario?.Rol == "Administrador";
+
+    private string Moneda(decimal valor) =>
+        valor.ToString("C2", cultura);
+
+    private string Fecha(DateTime valor) =>
+        new DateTimeOffset(DateTime.SpecifyKind(valor, DateTimeKind.Utc))
+            .ToOffset(TimeSpan.FromHours(-3))
+            .ToString("dd/MM/yyyy HH:mm", cultura);
+
+    private EstadoPedidoOpcion? SiguienteEstado(string actual)
+    {
+        var posicion = Array.FindIndex(
+            flujo,
+            nombre => string.Equals(
+                nombre, actual, StringComparison.OrdinalIgnoreCase));
+
+        if (posicion < 0 || posicion >= flujo.Length - 1)
+            return null;
+
+        return estados.FirstOrDefault(e => string.Equals(
+            e.NombreEstado,
+            flujo[posicion + 1],
+            StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task CargarAsync()
+    {
+        if (cargando || !TieneAcceso)
+            return;
+
+        cargando = true;
+        error = null;
+        listado = null;
+
+        try
+        {
+            using var respuestaEstados = await Http.GetAsync(
+                "api/admin/pedidos/estados");
+
+            if (!await ValidarAsync(respuestaEstados))
+                return;
+
+            estados = await respuestaEstados.Content
+                .ReadFromJsonAsync<List<EstadoPedidoOpcion>>() ?? new();
+
+            using var respuesta = await Http.GetAsync(
+                $"api/admin/pedidos?pagina={pagina}&tamanoPagina=10");
+
+            if (!await ValidarAsync(respuesta))
+                return;
+
+            listado = await respuesta.Content
+                .ReadFromJsonAsync<PaginaAdminPedidos>();
+
+            if (listado is null)
+                error = "El servidor devolvió una respuesta vacía.";
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+            error = "La consulta tardó demasiado.";
+        }
+        catch (JsonException)
+        {
+            error = "No se pudieron interpretar los pedidos.";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private void PedirConfirmacion(AdminPedidoResumen pedido)
+    {
+        if (guardando || !TieneAcceso)
+            return;
+
+        estadoSeleccionado = SiguienteEstado(pedido.Estado);
+
+        if (estadoSeleccionado is not null)
+            pedidoSeleccionado = pedido;
+    }
+
+    private void Cancelar()
+    {
+        pedidoSeleccionado = null;
+        estadoSeleccionado = null;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (guardando || !TieneAcceso ||
+            pedidoSeleccionado is null || estadoSeleccionado is null)
+            return;
+
+        var idPedido = pedidoSeleccionado.IdPedido;
+        var idEstado = estadoSeleccionado.IdEstadoPedido;
+
+        Cancelar();
+        guardando = true;
+        error = null;
+        exito = null;
+
+        try
+        {
+            using var solicitud = new HttpRequestMessage(
+                HttpMethod.Patch,
+                $"api/admin/pedidos/{idPedido}/estado")
+            {
+                Content = JsonContent.Create(new
+                {
+                    idEstadoPedido = idEstado
+                })
+            };
+
+            using var respuesta = await Http.SendAsync(solicitud);
+
+            if (await ValidarAsync(respuesta))
+                exito = $"Estado del pedido #{idPedido} actualizado.";
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo confirmar el cambio. Actualizá los pedidos.";
+        }
+        catch (OperationCanceledException)
+        {
+            error = "La operación tardó demasiado. Actualizá los pedidos.";
+        }
+        finally
+        {
+            guardando = false;
+        }
+
+        // Volvemos a consultar para mostrar el estado real del servidor.
+        var errorOperacion = error;
+        await CargarAsync();
+
+        if (!string.IsNullOrWhiteSpace(errorOperacion))
+        {
+            error = string.IsNullOrWhiteSpace(error)
+                ? errorOperacion
+                : $"{errorOperacion} {error}";
+        }
+    }
+
+    private async Task<bool> ValidarAsync(HttpResponseMessage respuesta)
+    {
+        if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            Sesion.CerrarSesion();
+            Nav.NavigateTo("/login");
+            return false;
+        }
+
+        if (respuesta.IsSuccessStatusCode)
+            return true;
+
+        error = respuesta.StatusCode == HttpStatusCode.Forbidden
+            ? "No tenés permiso para gestionar pedidos."
+            : "No se pudo completar la operación.";
+
+        try
+        {
+            using var documento = await JsonDocument.ParseAsync(
+                await respuesta.Content.ReadAsStreamAsync());
+
+            var raiz = documento.RootElement;
+
+            if (raiz.ValueKind == JsonValueKind.Object &&
+                raiz.TryGetProperty("mensaje", out var mensaje) &&
+                mensaje.ValueKind == JsonValueKind.String)
+            {
+                error = mensaje.GetString() ?? error;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return false;
+    }
+
+    private async Task AnteriorAsync()
+    {
+        if (cargando || guardando || pagina <= 1)
+            return;
+
+        pagina--;
+        await CargarAsync();
+    }
+
+    private async Task SiguienteAsync()
+    {
+        if (cargando || guardando ||
+            listado is null || pagina >= listado.TotalPaginas)
+            return;
+
+        pagina++;
+        await CargarAsync();
+    }
+}

@@ -1,0 +1,26 @@
+﻿@page "/"
+
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<div class="inicio-app" role="status">
+    <h1>Euphoria Essence</h1>
+    <p>Iniciando...</p>
+</div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        await Sesion.RestaurarSesionAsync();
+
+        Nav.NavigateTo(
+            Sesion.EstaLogueado ? Sesion.RutaInicio : "/login",
+            replace: true);
+    }
+}

@@ -1,0 +1,662 @@
+﻿@page "/admin/productos/nuevo"
+@page "/admin/productos/{Id:int}/editar"
+
+@using System.Net
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Gestionar perfume | Euphoria Essence</PageTitle>
+
+<section class="form-page @(Id.HasValue ? "modo-edicion" : "")">
+    <header class="cabecera">
+        <a href="perfil" aria-label="Mi perfil">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect width="24" height="24" fill="#eeeeee" />
+                <circle cx="12" cy="12" r="11" fill="#08618a" />
+                <circle cx="12" cy="8" r="4" fill="white" />
+                <path d="M4 21a8 8 0 0 1 16 0" fill="white" />
+            </svg>
+        </a>
+
+        <h1>Euphoria Essence</h1>
+    </header>
+
+    @if (!Sesion.EstaLogueado)
+    {
+        <a class="boton" href="login">Iniciar sesión</a>
+    }
+    else if (!TieneAcceso)
+    {
+        <p role="alert">
+            Esta sección es exclusiva del administrador.
+        </p>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="mensaje-error" role="alert">@error</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(exito))
+        {
+            <div class="notificacion" role="status">@exito</div>
+        }
+
+        @if (cargando)
+        {
+            <p class="estado" role="status">Cargando formulario...</p>
+        }
+        else if (resultadoIncierto)
+        {
+            <a class="boton" href="admin/productos">
+                Revisar perfumes
+            </a>
+        }
+        else if (guardado)
+        {
+            @if (imagenPendiente && idGuardado.HasValue)
+            {
+                <p class="ayuda">
+                    El perfume ya está guardado. Falta cargar su imagen.
+                </p>
+
+                <button class="boton"
+                        type="button"
+                        disabled="@ocupado"
+                        @onclick="ReintentarImagenAsync">
+                    @(ocupado ? "Subiendo..." : "Reintentar imagen")
+                </button>
+            }
+
+            <a class="boton volver" href="admin/productos">
+                Volver al catálogo
+            </a>
+        }
+        else if (listo)
+        {
+            <EditForm Model="@modelo" OnValidSubmit="@GuardarAsync">
+                <DataAnnotationsValidator />
+
+                <fieldset disabled="@ocupado">
+                    <div class="selector-imagen">
+                        <span>Agregar imagen:</span>
+
+                        <label class="imagen-boton"
+                               for="imagen-perfume"
+                               title="Seleccionar imagen">
+                            <span aria-hidden="true">🖼️</span>
+                            <span class="solo-lectores">
+                                Seleccionar imagen del perfume
+                            </span>
+                        </label>
+
+                        <InputFile id="imagen-perfume"
+                                   class="archivo-input"
+                                   accept=".jpg,.jpeg,.png"
+                                   disabled="@ocupado"
+                                   OnChange="SeleccionarImagen" />
+                    </div>
+
+                    @if (imagen is not null)
+                    {
+                        <p class="nombre-archivo">@imagen.Name</p>
+                    }
+
+                    <div class="campo">
+                        <label for="marca-perfume">Marca</label>
+
+                        <InputSelect id="marca-perfume"
+                                     @bind-Value="modelo.IdMarca">
+                            <option value="0">Seleccione su Marca...</option>
+
+                            @foreach (var marca in marcas)
+                            {
+                                <option value="@marca.IdMarca">
+                                    @marca.NombreMarca
+                                </option>
+                            }
+                        </InputSelect>
+
+                        <ValidationMessage For="@(() => modelo.IdMarca)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="descripcion-perfume">Descripción</label>
+
+                        <InputText id="descripcion-perfume"
+                                   maxlength="700"
+                                   placeholder="Ingrese su Descripción..."
+                                   @bind-Value="modelo.Descripcion" />
+
+                        <ValidationMessage For="@(() => modelo.Descripcion)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="nombre-perfume">Nombre</label>
+
+                        <InputText id="nombre-perfume"
+                                   maxlength="150"
+                                   placeholder="Ingrese su Nombre..."
+                                   @bind-Value="modelo.Nombre" />
+
+                        <ValidationMessage For="@(() => modelo.Nombre)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="categoria-perfume">Categoría</label>
+
+                        <InputSelect id="categoria-perfume"
+                                     @bind-Value="modelo.IdCategoria">
+                            <option value="0">Seleccione su Categoría...</option>
+
+                            @foreach (var categoria in categorias)
+                            {
+                                <option value="@categoria.IdCategoria">
+                                    @categoria.NombreCategoria
+                                </option>
+                            }
+                        </InputSelect>
+
+                        <ValidationMessage For="@(() => modelo.IdCategoria)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="tamano-perfume">Tamaño</label>
+
+                        <InputNumber id="tamano-perfume"
+                                     min="1"
+                                     step="1"
+                                     @bind-Value="modelo.TamanoMl" />
+
+                        <ValidationMessage For="@(() => modelo.TamanoMl)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="concentracion-perfume">Concentración</label>
+
+                        <InputText id="concentracion-perfume"
+                                   maxlength="50"
+                                   placeholder="Ingrese su tipo según la concentración..."
+                                   @bind-Value="modelo.Concentracion" />
+
+                        <ValidationMessage For="@(() => modelo.Concentracion)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="stock-perfume">Cantidad</label>
+
+                        @if (Id.HasValue)
+                        {
+                            <input id="stock-perfume"
+                                   type="number"
+                                   value="@modelo.Stock"
+                                   readonly />
+
+                            <p class="ayuda">
+                                Se modifica desde Actualizar Stock.
+                            </p>
+                        }
+                        else
+                        {
+                            <InputNumber id="stock-perfume"
+                                         min="0"
+                                         step="1"
+                                         @bind-Value="modelo.Stock" />
+
+                            <ValidationMessage For="@(() => modelo.Stock)" />
+                        }
+                    </div>
+
+                    <div class="campo">
+                        <label for="precio-perfume">Precio</label>
+
+                        <InputNumber id="precio-perfume"
+                                     min="0.01"
+                                     step="0.01"
+                                     @bind-Value="modelo.Precio" />
+
+                        <ValidationMessage For="@(() => modelo.Precio)" />
+                    </div>
+
+                    <button class="boton guardar"
+                            type="submit"
+                            disabled="@ocupado">
+                        @(ocupado
+                            ? "Guardando..."
+                            : Id.HasValue
+                                ? "Editar Perfume"
+                                : "Agregar Perfume")
+                    </button>
+                </fieldset>
+            </EditForm>
+        }
+        else
+        {
+            <button class="boton" @onclick="CargarAsync">
+                Reintentar
+            </button>
+        }
+    }
+</section>
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    private const long MaximoImagen = 5 * 1024 * 1024;
+
+    private GuardarPerfumeSolicitud modelo = new();
+    private List<MarcaFiltro> marcas = new();
+    private List<CategoriaFiltro> categorias = new();
+
+    private IBrowserFile? imagen;
+    private int? idGuardado;
+
+    private bool cargando;
+    private bool ocupado;
+    private bool listo;
+    private bool guardado;
+    private bool imagenPendiente;
+    private bool resultadoIncierto;
+
+    private string? error;
+    private string? exito;
+
+    private bool TieneAcceso =>
+        Sesion.EstaLogueado &&
+        Sesion.Usuario?.Rol == "Administrador";
+
+    protected override Task OnParametersSetAsync() => CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        if (cargando || ocupado || !TieneAcceso)
+            return;
+
+        cargando = true;
+        listo = false;
+        guardado = false;
+        imagenPendiente = false;
+        resultadoIncierto = false;
+        imagen = null;
+        idGuardado = null;
+        error = null;
+        exito = null;
+        modelo = new();
+
+        try
+        {
+            using var respuestaMarcas = await Http.GetAsync(
+                "api/catalogo/marcas");
+
+            if (!await ValidarAsync(respuestaMarcas))
+                return;
+
+            marcas = await respuestaMarcas.Content
+                .ReadFromJsonAsync<List<MarcaFiltro>>() ?? new();
+
+            using var respuestaCategorias = await Http.GetAsync(
+                "api/catalogo/categorias");
+
+            if (!await ValidarAsync(respuestaCategorias))
+                return;
+
+            categorias = await respuestaCategorias.Content
+                .ReadFromJsonAsync<List<CategoriaFiltro>>() ?? new();
+
+            if (Id.HasValue)
+            {
+                using var respuesta = await Http.GetAsync(
+                    $"api/admin/productos/{Id.Value}");
+
+                if (!await ValidarAsync(respuesta))
+                    return;
+
+                var producto = await respuesta.Content
+                    .ReadFromJsonAsync<PerfumeAdminDetalle>();
+
+                if (producto is null)
+                {
+                    error = "No se pudo leer el perfume.";
+                    return;
+                }
+
+                modelo = producto;
+
+                // Conservamos la selección aunque haya quedado inactiva.
+                if (!marcas.Any(m => m.IdMarca == producto.IdMarca))
+                {
+                    marcas.Add(new MarcaFiltro
+                    {
+                        IdMarca = producto.IdMarca,
+                        NombreMarca = "Marca actual (inactiva)"
+                    });
+                }
+
+                if (!categorias.Any(c =>
+                    c.IdCategoria == producto.IdCategoria))
+                {
+                    categorias.Add(new CategoriaFiltro
+                    {
+                        IdCategoria = producto.IdCategoria,
+                        NombreCategoria = "Categoría actual (inactiva)"
+                    });
+                }
+
+                if (!producto.Activo)
+                {
+                    exito =
+                        "Este perfume está retirado. Editarlo no lo reactiva.";
+                }
+            }
+
+            if (marcas.Count == 0 || categorias.Count == 0)
+            {
+                error =
+                    "Necesitás una marca y una categoría activas " +
+                    "para agregar un perfume.";
+                return;
+            }
+
+            listo = true;
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+            error = "La consulta tardó demasiado.";
+        }
+        catch (JsonException)
+        {
+            error = "No se pudo interpretar el formulario.";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private void SeleccionarImagen(InputFileChangeEventArgs evento)
+    {
+        error = null;
+        imagen = null;
+
+        var archivo = evento.File;
+        var extension = System.IO.Path.GetExtension(archivo.Name)
+            .ToLowerInvariant();
+
+        if (extension is not ".jpg" and not ".jpeg" and not ".png")
+        {
+            error = "Seleccioná una imagen JPG o PNG.";
+            return;
+        }
+
+        if (archivo.Size <= 0 || archivo.Size > MaximoImagen)
+        {
+            error = "La imagen debe pesar entre 1 byte y 5 MB.";
+            return;
+        }
+
+        imagen = archivo;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (ocupado || guardado || resultadoIncierto || !TieneAcceso)
+            return;
+
+        if (decimal.Round(modelo.Precio, 2) != modelo.Precio)
+        {
+            error = "El precio admite como máximo dos decimales.";
+            return;
+        }
+
+        ocupado = true;
+        error = null;
+        exito = null;
+
+        try
+        {
+            object cuerpo = Id.HasValue
+                ? new
+                {
+                    modelo.Nombre,
+                    modelo.Descripcion,
+                    modelo.Precio,
+                    modelo.TamanoMl,
+                    modelo.Concentracion,
+                    modelo.IdMarca,
+                    modelo.IdCategoria
+                }
+                : modelo;
+
+            using var solicitud = new HttpRequestMessage(
+                Id.HasValue ? HttpMethod.Put : HttpMethod.Post,
+                Id.HasValue
+                    ? $"api/admin/productos/{Id.Value}"
+                    : "api/admin/productos")
+            {
+                Content = JsonContent.Create(cuerpo)
+            };
+
+            using var respuesta = await Http.SendAsync(solicitud);
+
+            if (!await ValidarAsync(respuesta))
+            {
+                if ((int)respuesta.StatusCode >= 500)
+                {
+                    resultadoIncierto = true;
+                    error =
+                        "No se pudo confirmar el resultado. " +
+                        "Revisá el listado antes de repetir.";
+                }
+
+                return;
+            }
+
+            guardado = true;
+
+            if (Id.HasValue)
+            {
+                idGuardado = Id.Value;
+            }
+            else
+            {
+                var datos = await respuesta.Content
+                    .ReadFromJsonAsync<PerfumeGuardadoRespuesta>();
+
+                if (datos is null || datos.IdProducto < 1)
+                {
+                    resultadoIncierto = true;
+                    error =
+                        "El perfume se guardó, pero no se pudo leer su ID. " +
+                        "Buscalo en el listado antes de continuar.";
+                    return;
+                }
+
+                idGuardado = datos.IdProducto;
+            }
+
+            exito = Id.HasValue
+                ? "Perfume actualizado correctamente."
+                : "Perfume agregado correctamente.";
+        }
+        catch (HttpRequestException)
+        {
+            resultadoIncierto = true;
+            error =
+                "No se pudo confirmar el guardado. " +
+                "Revisá el listado antes de repetir.";
+        }
+        catch (OperationCanceledException)
+        {
+            resultadoIncierto = true;
+            error =
+                "El guardado tardó demasiado. " +
+                "Revisá el listado antes de repetir.";
+        }
+        catch (JsonException)
+        {
+            resultadoIncierto = true;
+            error = "No se pudo leer la respuesta. Revisá el listado.";
+        }
+        finally
+        {
+            ocupado = false;
+        }
+
+        if (guardado && idGuardado.HasValue && imagen is not null)
+        {
+            imagenPendiente = true;
+            await ReintentarImagenAsync();
+        }
+    }
+
+    private async Task ReintentarImagenAsync()
+    {
+        if (ocupado || !TieneAcceso ||
+            imagen is null || !idGuardado.HasValue)
+            return;
+
+        ocupado = true;
+        error = null;
+
+        try
+        {
+            var archivo = imagen;
+            var extension = System.IO.Path.GetExtension(archivo.Name)
+                .ToLowerInvariant();
+
+            using var contenido = new MultipartFormDataContent();
+            using var stream = archivo.OpenReadStream(MaximoImagen);
+            using var archivoContenido = new StreamContent(stream);
+
+            archivoContenido.Headers.ContentType =
+                new MediaTypeHeaderValue(
+                    extension == ".png" ? "image/png" : "image/jpeg");
+
+            contenido.Add(archivoContenido, "Archivo", archivo.Name);
+
+            using var respuesta = await Http.PostAsync(
+                $"api/admin/productos/{idGuardado.Value}/imagenes",
+                contenido);
+
+            if (!await ValidarAsync(respuesta))
+            {
+                if ((int)respuesta.StatusCode >= 500)
+                {
+                    imagenPendiente = false;
+                    error =
+                        "El perfume está guardado. No se pudo confirmar " +
+                        "la imagen; revisala desde el catálogo antes de repetir.";
+                }
+
+                return;
+            }
+
+            imagenPendiente = false;
+            imagen = null;
+            exito = "Perfume e imagen guardados correctamente.";
+        }
+        catch (HttpRequestException)
+        {
+            imagenPendiente = false;
+            error =
+                "El perfume está guardado. No se pudo confirmar la imagen. " +
+                "Revisala antes de volver a subirla.";
+        }
+        catch (OperationCanceledException)
+        {
+            imagenPendiente = false;
+            error =
+                "El perfume está guardado. La carga de imagen tardó " +
+                "demasiado; revisala antes de repetir.";
+        }
+        catch (System.IO.IOException)
+        {
+            imagenPendiente = false;
+            error =
+                "El perfume está guardado, pero no se pudo leer la imagen. " +
+                "Podés cargarla entrando a Editar.";
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    private async Task<bool> ValidarAsync(HttpResponseMessage respuesta)
+    {
+        if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            Sesion.CerrarSesion();
+            Nav.NavigateTo("/login", replace: true);
+            return false;
+        }
+
+        if (respuesta.IsSuccessStatusCode)
+            return true;
+
+        error = respuesta.StatusCode == HttpStatusCode.Forbidden
+            ? "No tenés permiso para realizar esta operación."
+            : "No se pudo completar la operación.";
+
+        try
+        {
+            using var documento = await JsonDocument.ParseAsync(
+                await respuesta.Content.ReadAsStreamAsync());
+
+            var raiz = documento.RootElement;
+
+            if (raiz.ValueKind != JsonValueKind.Object)
+                return false;
+
+            if (raiz.TryGetProperty("mensaje", out var mensaje) &&
+                mensaje.ValueKind == JsonValueKind.String)
+            {
+                error = mensaje.GetString() ?? error;
+            }
+            else if (raiz.TryGetProperty("errors", out var errores) &&
+                     errores.ValueKind == JsonValueKind.Object)
+            {
+                var mensajes = new List<string>();
+
+                foreach (var campo in errores.EnumerateObject())
+                {
+                    if (campo.Value.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    foreach (var item in campo.Value.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String &&
+                            item.GetString() is string texto)
+                        {
+                            mensajes.Add(texto);
+                        }
+                    }
+                }
+
+                if (mensajes.Count > 0)
+                    error = string.Join(" ", mensajes);
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return false;
+    }
+}

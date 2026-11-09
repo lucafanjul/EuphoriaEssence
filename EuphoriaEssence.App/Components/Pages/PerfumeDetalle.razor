@@ -1,0 +1,671 @@
+﻿@page "/perfumes/{Id:int}"
+
+@using System.Globalization
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Detalle del perfume | Euphoria Essence</PageTitle>
+
+<section class="detalle-page">
+    <header class="cabecera">
+        <a class="perfil-icono"
+           href="perfil"
+           aria-label="Mi perfil">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect width="24" height="24" fill="#eeeeee" />
+                <circle cx="12" cy="12" r="11" fill="#08618a" />
+                <circle cx="12" cy="8" r="4" fill="white" />
+                <path d="M4 21a8 8 0 0 1 16 0" fill="white" />
+            </svg>
+        </a>
+
+        <h1>Euphoria Essence</h1>
+
+        @if (Sesion.Usuario?.Rol == "Cliente")
+        {
+            <a class="carrito-icono"
+               href="carrito"
+               aria-label="Mi carrito">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2 4h3l3 12h11l3-10" />
+                    <path d="M7 8h13" />
+                    <circle cx="10" cy="21" r="1" />
+                    <circle cx="18" cy="21" r="1" />
+                </svg>
+            </a>
+        }
+    </header>
+
+    @if (!Sesion.EstaLogueado)
+    {
+        <div class="estado">
+            <p>Iniciá sesión para consultar el perfume.</p>
+            <a class="boton" href="login">Iniciar sesión</a>
+        </div>
+    }
+    else if (cargando)
+    {
+        <p class="estado" role="status">Cargando perfume...</p>
+    }
+    else if (datos is null)
+    {
+        <div class="estado" role="alert">
+            <p>@errorCarga</p>
+
+            <button class="boton"
+                    type="button"
+                    @onclick="CargarAsync">
+                Reintentar
+            </button>
+
+            <a class="volver" href="catalogo">Volver al catálogo</a>
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(exito))
+        {
+            <div class="notificacion" role="status">
+                <p>@exito</p>
+                @if (Sesion.Usuario?.Rol == "Cliente")
+                {
+                    <a href="carrito">Ver mi carrito</a>
+                }
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(errorCompra))
+        {
+            <div class="mensaje-error" role="alert">
+                <p>@errorCompra</p>
+                @if (Sesion.Usuario?.Rol == "Cliente")
+                {
+                    <a href="carrito">Revisar mi carrito</a>
+                }
+                else
+                {
+                    <a href="admin/productos">Revisar catálogo</a>
+                }
+            </div>
+        }
+
+        <div class="imagen-principal">
+            @if (!string.IsNullOrWhiteSpace(imagenActual))
+            {
+                <img src="@UrlImagen(imagenActual)"
+                     alt="@datos.Producto.Nombre" />
+            }
+            else
+            {
+                <span>Sin imagen disponible</span>
+            }
+        </div>
+
+        @if (datos.Imagenes.Count > 1)
+        {
+            <div class="galeria" aria-label="Imágenes del perfume">
+                @foreach (var imagen in datos.Imagenes)
+                {
+                    <button type="button"
+                            class="@(imagenActual == imagen.UrlImagen
+                                ? "miniatura seleccionada"
+                                : "miniatura")"
+                            aria-label="Ver imagen del perfume"
+                            aria-pressed="@(imagenActual == imagen.UrlImagen)"
+                            @onclick="() => imagenActual = imagen.UrlImagen">
+                        <img src="@UrlImagen(imagen.UrlImagen)" alt="" />
+                    </button>
+                }
+            </div>
+        }
+
+        <div class="informacion">
+            <div class="datos-perfume">
+                <p class="marca">@datos.Producto.Marca</p>
+
+                <h2>@datos.Producto.Nombre</h2>
+
+                <div class="caracteristicas">
+                    <p class="categoria">@datos.Producto.Categoria</p>
+                    <p>@datos.Producto.Concentracion</p>
+                    <p>@datos.Producto.TamanoMl ml</p>
+                </div>
+
+                <p class="precio">
+                    @datos.Producto.Precio.ToString("C2", cultura)
+                </p>
+            </div>
+
+            <div class="descripcion">
+                <h3>Descripción</h3>
+
+                <p>@Descripcion</p>
+            </div>
+        </div>
+
+        @if (Sesion.Usuario?.Rol == "Cliente")
+        {
+            <button type="button"
+                    class="boton agregar"
+                    disabled="@(!datos.Producto.Disponible || agregando)"
+                    @onclick="AgregarAsync">
+                @(agregando
+                    ? "Agregando..."
+                    : datos.Producto.Disponible
+                        ? "Agregar al carrito"
+                        : "Sin stock")
+            </button>
+        }
+        else if (Sesion.Usuario?.Rol == "Administrador")
+        {
+            @if (ConfirmarBaja)
+            {
+                @if (retirado)
+                {
+                    <a class="boton agregar" href="admin/productos">
+                        Volver al catálogo
+                    </a>
+                }
+                else
+                {
+                    <button type="button"
+                            class="boton agregar"
+                            disabled="@eliminando"
+                            @onclick="EliminarAsync">
+                        @(eliminando
+                            ? "Eliminando..."
+                            : "¿Seguro de Eliminar Este Producto?")
+                    </button>
+                }
+            }
+            else
+            {
+                <button type="button"
+                        class="boton agregar"
+                        disabled="@guardandoStock"
+                        @onclick="AbrirStock">
+                    Actualizar stock
+                </button>
+
+                @if (mostrarStock)
+                {
+                    <div class="stock-panel">
+                        <label for="stock-detalle">Cantidad disponible</label>
+
+                        <div class="stock-controles">
+                            <input id="stock-detalle"
+                                   type="number"
+                                   min="0"
+                                   max="2147483647"
+                                   step="1"
+                                   disabled="@guardandoStock"
+                                   @bind="stockNuevo" />
+
+                            <button type="button"
+                                    disabled="@guardandoStock"
+                                    @onclick="GuardarStockAsync">
+                                @(guardandoStock ? "Guardando..." : "Guardar")
+                            </button>
+
+                            <button type="button"
+                                    disabled="@guardandoStock"
+                                    @onclick="CancelarStock">
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(mensajeStock))
+                {
+                    <p class="stock-mensaje" role="status">
+                        @mensajeStock
+                    </p>
+                }
+            }
+        }
+    }
+</section>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+    [SupplyParameterFromQuery(Name = "eliminar")]
+    public bool ConfirmarBaja { get; set; }
+
+    private bool eliminando;
+    private bool retirado;
+    private readonly CultureInfo cultura =
+        CultureInfo.GetCultureInfo("es-AR");
+
+    private PerfumeDetalleRespuesta? datos;
+    private string? imagenActual;
+    private string? errorCarga;
+    private string? errorCompra;
+    private string? exito;
+    private bool cargando;
+    private bool agregando;
+    private int versionCarga;
+    private bool mostrarStock;
+    private bool guardandoStock;
+    private int? stockNuevo;
+    private string? mensajeStock;
+    private string Descripcion =>
+        string.IsNullOrWhiteSpace(datos?.Producto.Descripcion)
+            ? "Sin descripción disponible."
+            : datos!.Producto.Descripcion!;
+
+    protected override Task OnParametersSetAsync() => CargarAsync();
+    private void AbrirStock()
+    {
+        if (datos is null || guardandoStock)
+            return;
+
+        stockNuevo = datos.Producto.Stock;
+        mensajeStock = null;
+        mostrarStock = true;
+    }
+
+    private void CancelarStock()
+    {
+        mostrarStock = false;
+        mensajeStock = null;
+    }
+
+    private async Task GuardarStockAsync()
+    {
+        if (guardandoStock || datos is null ||
+            ConfirmarBaja || retirado)
+        {
+            return;
+        }
+
+        if (!Sesion.EstaLogueado)
+        {
+            Sesion.CerrarSesion();
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        if (Sesion.Usuario?.Rol != "Administrador")
+            return;
+
+        if (!stockNuevo.HasValue || stockNuevo.Value < 0)
+        {
+            mensajeStock =
+                "Ingresá una cantidad entera mayor o igual a cero.";
+            return;
+        }
+
+        var cantidad = stockNuevo.Value;
+        var idProducto = datos.Producto.IdProducto;
+        var version = versionCarga;
+
+        guardandoStock = true;
+        mensajeStock = null;
+
+        try
+        {
+            using var solicitud = new HttpRequestMessage(
+                HttpMethod.Patch,
+                $"api/admin/productos/{idProducto}/stock")
+            {
+                Content = JsonContent.Create(new
+                {
+                    stock = cantidad
+                })
+            };
+
+            using var respuesta = await Http.SendAsync(solicitud);
+
+            if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Sesion.CerrarSesion();
+                Nav.NavigateTo("/login", replace: true);
+                return;
+            }
+
+            if (version != versionCarga)
+                return;
+
+            if (respuesta.IsSuccessStatusCode)
+            {
+                datos.Producto.Stock = cantidad;
+                datos.Producto.Disponible = cantidad > 0;
+
+                mostrarStock = false;
+                mensajeStock = "Stock actualizado correctamente.";
+                return;
+            }
+
+            var mensaje = respuesta.StatusCode == HttpStatusCode.Forbidden
+                ? "No tenés permiso para actualizar el stock."
+                : "No se pudo actualizar el stock.";
+
+            try
+            {
+                using var documento = await JsonDocument.ParseAsync(
+                    await respuesta.Content.ReadAsStreamAsync());
+
+                var raiz = documento.RootElement;
+
+                if (raiz.ValueKind == JsonValueKind.Object &&
+                    raiz.TryGetProperty("mensaje", out var texto) &&
+                    texto.ValueKind == JsonValueKind.String)
+                {
+                    mensaje = texto.GetString() ?? mensaje;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+
+            if (version == versionCarga)
+                mensajeStock = mensaje;
+        }
+        catch (HttpRequestException)
+        {
+            if (version == versionCarga)
+            {
+                mensajeStock =
+                    "No se pudo confirmar el cambio. " +
+                    "Volvé a abrir el detalle para consultar el stock.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (version == versionCarga)
+            {
+                mensajeStock =
+                    "La operación tardó demasiado. " +
+                    "Volvé a abrir el detalle para consultar el stock.";
+            }
+        }
+        finally
+        {
+            guardandoStock = false;
+        }
+    }
+    private async Task EliminarAsync()
+    {
+        if (eliminando || retirado || datos is null || !ConfirmarBaja)
+            return;
+
+        if (!Sesion.EstaLogueado)
+        {
+            Sesion.CerrarSesion();
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        if (Sesion.Usuario?.Rol != "Administrador")
+            return;
+
+        var idProducto = datos.Producto.IdProducto;
+        var version = versionCarga;
+
+        eliminando = true;
+        errorCompra = null;
+        exito = null;
+
+        try
+        {
+            using var respuesta = await Http.DeleteAsync(
+                $"api/admin/productos/{idProducto}");
+
+            if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Sesion.CerrarSesion();
+                Nav.NavigateTo("/login", replace: true);
+                return;
+            }
+
+            if (version != versionCarga)
+                return;
+
+            if (respuesta.IsSuccessStatusCode)
+            {
+                retirado = true;
+                exito = "Perfume eliminado del catálogo";
+                return;
+            }
+
+            var mensaje = "No se pudo eliminar el perfume.";
+
+            try
+            {
+                using var documento = await JsonDocument.ParseAsync(
+                    await respuesta.Content.ReadAsStreamAsync());
+
+                var raiz = documento.RootElement;
+
+                if (raiz.ValueKind == JsonValueKind.Object &&
+                    raiz.TryGetProperty("mensaje", out var texto) &&
+                    texto.ValueKind == JsonValueKind.String)
+                {
+                    mensaje = texto.GetString() ?? mensaje;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+
+            if (version == versionCarga)
+                errorCompra = mensaje;
+        }
+        catch (HttpRequestException)
+        {
+            if (version == versionCarga)
+            {
+                errorCompra =
+                    "No se pudo confirmar la eliminación. " +
+                    "Revisá el catálogo para comprobar el resultado.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (version == versionCarga)
+            {
+                errorCompra =
+                    "La operación tardó demasiado. " +
+                    "Revisá el catálogo para comprobar el resultado.";
+            }
+        }
+        finally
+        {
+            eliminando = false;
+        }
+    }
+    private async Task CargarAsync()
+    {
+        var version = ++versionCarga;
+
+        datos = null;
+        imagenActual = null;
+        errorCarga = null;
+        errorCompra = null;
+        exito = null;
+        retirado = false;
+        mostrarStock = false;
+        stockNuevo = null;
+        mensajeStock = null;
+        cargando = false;
+
+        if (!Sesion.EstaLogueado)
+            return;
+
+        cargando = true;
+
+        try
+        {
+            using var respuesta = await Http.GetAsync(
+                $"api/productos/{Id}");
+
+            if (version != versionCarga)
+                return;
+
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                errorCarga = respuesta.StatusCode == HttpStatusCode.NotFound
+                    ? "El perfume no existe o ya no está disponible."
+                    : "No se pudo consultar el perfume.";
+
+                return;
+            }
+
+            var resultado = await respuesta.Content
+                .ReadFromJsonAsync<PerfumeDetalleRespuesta>();
+
+            if (version != versionCarga)
+                return;
+
+            datos = resultado;
+
+            if (datos is null)
+            {
+                errorCarga = "El servidor devolvió una respuesta vacía.";
+                return;
+            }
+
+            imagenActual = datos.Imagenes
+                .OrderByDescending(i => i.EsPrincipal)
+                .FirstOrDefault()?.UrlImagen;
+        }
+        catch (HttpRequestException)
+        {
+            if (version == versionCarga)
+                errorCarga = "No se pudo conectar con el servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+            if (version == versionCarga)
+                errorCarga = "La consulta tardó demasiado.";
+        }
+        catch (JsonException)
+        {
+            if (version == versionCarga)
+                errorCarga = "No se pudo interpretar el perfume.";
+        }
+        finally
+        {
+            if (version == versionCarga)
+                cargando = false;
+        }
+    }
+
+    private async Task AgregarAsync()
+    {
+        if (agregando || datos is null || !datos.Producto.Disponible)
+            return;
+
+        if (!Sesion.EstaLogueado)
+        {
+            Sesion.CerrarSesion();
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        if (Sesion.Usuario?.Rol != "Cliente")
+            return;
+
+        var idProducto = datos.Producto.IdProducto;
+        var version = versionCarga;
+
+        agregando = true;
+        errorCompra = null;
+        exito = null;
+
+        try
+        {
+            using var respuesta = await Http.PostAsJsonAsync(
+                "api/carrito/items",
+                new
+                {
+                    idProducto,
+                    cantidad = 1
+                });
+
+            if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Sesion.CerrarSesion();
+                Nav.NavigateTo("/login");
+                return;
+            }
+
+            if (version != versionCarga)
+                return;
+
+            if (respuesta.IsSuccessStatusCode)
+            {
+                exito = "Perfume agregado al carrito";
+                return;
+            }
+
+            var mensaje = await LeerErrorAsync(respuesta);
+
+            if (version == versionCarga)
+                errorCompra = mensaje;
+        }
+        catch (HttpRequestException)
+        {
+            if (version == versionCarga)
+            {
+                errorCompra =
+                    "No se pudo confirmar la operación. " +
+                    "Revisá el carrito antes de volver a agregar.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (version == versionCarga)
+            {
+                errorCompra =
+                    "La operación tardó demasiado. " +
+                    "Revisá el carrito antes de repetir.";
+            }
+        }
+        finally
+        {
+            agregando = false;
+        }
+    }
+
+    private static async Task<string> LeerErrorAsync(
+        HttpResponseMessage respuesta)
+    {
+        try
+        {
+            using var documento = await JsonDocument.ParseAsync(
+                await respuesta.Content.ReadAsStreamAsync());
+
+            var raiz = documento.RootElement;
+
+            if (raiz.ValueKind == JsonValueKind.Object &&
+                raiz.TryGetProperty("mensaje", out var mensaje) &&
+                mensaje.ValueKind == JsonValueKind.String)
+            {
+                return mensaje.GetString()
+                    ?? "No se pudo agregar el perfume.";
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return respuesta.StatusCode == HttpStatusCode.Forbidden
+            ? "Tu cuenta no tiene permiso para usar el carrito."
+            : "No se pudo agregar el perfume. Revisá su disponibilidad.";
+    }
+
+    private string UrlImagen(string ruta) =>
+        new Uri(Http.BaseAddress!, ruta).AbsoluteUri;
+}

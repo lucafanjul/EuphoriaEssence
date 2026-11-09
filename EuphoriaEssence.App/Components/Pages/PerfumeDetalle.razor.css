@@ -1,0 +1,347 @@
+.detalle-page {
+    width: 100%;
+    max-width: 430px;
+    min-height: 100dvh;
+    margin: auto;
+    padding: 14px 22px 28px;
+    background: #080808;
+    color: #eeeeee;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 34px;
+}
+
+    .cabecera h1 {
+        flex: 1;
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(21px, 5.7vw, 28px);
+        font-weight: 700;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+.perfil-icono,
+.carrito-icono {
+    display: block;
+    flex: 0 0 25px;
+    color: #eee;
+}
+
+    .perfil-icono svg,
+    .carrito-icono svg {
+        display: block;
+        width: 25px;
+        height: 25px;
+    }
+
+    .carrito-icono svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+    }
+
+.imagen-principal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 86%;
+    aspect-ratio: 1;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 8px;
+    color: #aaa;
+    font-size: 13px;
+}
+
+    .imagen-principal img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+.galeria {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    margin-top: 14px;
+    padding: 4px;
+}
+
+.miniatura {
+    flex: 0 0 52px;
+    height: 52px;
+    padding: 3px;
+    border: 1px solid #666;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+}
+
+    .miniatura.seleccionada {
+        border: 2px solid #00b9cc;
+    }
+
+    .miniatura img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+.informacion {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 20px;
+    margin-top: 30px;
+}
+
+.datos-perfume {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+}
+
+.marca {
+    margin: 0 0 28px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.datos-perfume h2 {
+    margin: 0 0 40px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.caracteristicas {
+    width: 100%;
+}
+
+    .caracteristicas p {
+        margin: 0 0 27px;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+    }
+
+    .caracteristicas .categoria {
+        font-size: 17px;
+    }
+
+.precio {
+    margin: auto 0 0;
+    padding-top: 9px;
+    font-size: 24px;
+    font-weight: 400;
+    line-height: 1.3;
+}
+
+.descripcion {
+    min-width: 0;
+}
+
+    .descripcion h3 {
+        margin: 0 0 10px;
+        font-size: 16px;
+        font-weight: 400;
+        text-align: center;
+    }
+
+    .descripcion p {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 13px;
+        line-height: 1.65;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+    }
+
+.boton {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border: 0;
+    border-radius: 8px;
+    background: #eeeeee;
+    color: #080808;
+    font-size: 15px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.agregar {
+    margin-top: 15px;
+}
+
+    .agregar:active:not(:disabled) {
+        background: #00b9cc;
+    }
+
+.boton:disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+.notificacion {
+    margin-bottom: 24px;
+    padding: 14px;
+    background: white;
+    color: #080808;
+    text-align: center;
+}
+
+    .notificacion p {
+        margin: 0 0 8px;
+        font-size: 18px;
+    }
+
+    .notificacion a {
+        color: #080808;
+        font-size: 13px;
+    }
+
+.mensaje-error {
+    margin-bottom: 24px;
+    padding: 12px;
+    border: 1px solid #a75b5b;
+    border-radius: 8px;
+    background: #321818;
+    color: #ffcccc;
+    font-size: 13px;
+}
+
+    .mensaje-error a {
+        color: #ffcccc;
+    }
+
+.estado {
+    padding: 35px 0;
+    text-align: center;
+}
+
+.volver {
+    display: block;
+    margin-top: 22px;
+    color: #eee;
+}
+
+@media (max-width: 330px) {
+    .detalle-page {
+        padding-right: 17px;
+        padding-left: 17px;
+    }
+
+    .cabecera {
+        gap: 8px;
+    }
+
+        .cabecera h1 {
+            font-size: 21px;
+        }
+
+    .perfil-icono,
+    .carrito-icono {
+        flex-basis: 22px;
+    }
+
+        .perfil-icono svg,
+        .carrito-icono svg {
+            width: 22px;
+            height: 22px;
+        }
+
+    .informacion {
+        gap: 16px;
+    }
+
+    .marca {
+        font-size: 13px;
+    }
+
+    .datos-perfume h2,
+    .caracteristicas p {
+        font-size: 12px;
+    }
+
+    .caracteristicas .categoria {
+        font-size: 15px;
+    }
+
+    .descripcion h3 {
+        font-size: 14px;
+    }
+
+    .descripcion p {
+        font-size: 11px;
+    }
+
+    .precio {
+        font-size: 21px;
+    }
+}
+.stock-panel {
+    margin-top: 14px;
+}
+
+    .stock-panel label {
+        display: block;
+        margin-bottom: 8px;
+        color: #bbbbbb;
+        font-size: 12px;
+    }
+
+.stock-controles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+    .stock-controles input {
+        width: 80px;
+        min-height: 34px;
+        padding: 6px 9px;
+        border: 1px solid #777777;
+        border-radius: 5px;
+        background: #080808;
+        color: #eeeeee;
+        font-size: 14px;
+    }
+
+    .stock-controles button {
+        min-height: 34px;
+        padding: 6px 10px;
+        border: 1px solid #777777;
+        border-radius: 5px;
+        background: transparent;
+        color: #dddddd;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+        .stock-controles button:disabled {
+            opacity: .5;
+            cursor: wait;
+        }
+
+.stock-mensaje {
+    margin: 12px 0 0;
+    color: #cccccc;
+    font-size: 12px;
+    line-height: 1.5;
+}

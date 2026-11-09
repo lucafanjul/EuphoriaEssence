@@ -1,0 +1,154 @@
+﻿@page "/login"
+
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Iniciar sesión | Euphoria Essence</PageTitle>
+
+<section class="login-page">
+    <div class="login-contenido">
+        <header class="login-banner">
+            <img src="images/banner-login.png"
+                 alt="Euphoria Essence" />
+        </header>
+
+        <div class="login-formulario">
+            @if (Sesion.EstaLogueado)
+            {
+                <div class="sesion-activa">
+                    <p>Bienvenido, @Sesion.Usuario?.Nombre</p>
+
+                    <a class="boton" href="@Sesion.RutaInicio">
+                        @(Sesion.Usuario?.Rol == "Administrador"
+                            ? "Gestionar perfumes"
+                            : "Ver catálogo")
+                    </a>
+
+                    <a class="boton" href="perfil">
+                        Mi perfil
+                    </a>
+
+                    <button class="boton"
+                            type="button"
+                            @onclick="CerrarSesion">
+                        Cerrar sesión
+                    </button>
+                </div>
+            }
+            else
+            {
+                @if (!string.IsNullOrWhiteSpace(error))
+                {
+                    <div class="mensaje-error" role="alert">
+                        @error
+                    </div>
+                }
+
+                <EditForm Model="@modelo"
+                          OnValidSubmit="@IngresarAsync">
+                    <DataAnnotationsValidator />
+
+                    <fieldset disabled="@cargando">
+                        <div class="campo">
+                            <label for="login-email">
+                                Correo Electronico
+                            </label>
+
+                            <InputText id="login-email"
+                                       type="email"
+                                       autocomplete="username"
+                                       maxlength="150"
+                                       placeholder="Ingrese su Mail..."
+                                       @bind-Value="modelo.Email" />
+
+                            <ValidationMessage For="@(() => modelo.Email)" />
+                        </div>
+
+                        <div class="campo campo-password">
+                            <label for="login-password">
+                                Contraseña
+                            </label>
+
+                            <InputText id="login-password"
+                                       type="password"
+                                       autocomplete="current-password"
+                                       maxlength="128"
+                                       placeholder="Ingrese su Contraseña..."
+                                       @bind-Value="modelo.Password" />
+
+                            <ValidationMessage For="@(() => modelo.Password)" />
+                        </div>
+
+                        <p class="descripcion">
+                            Accedé a tu cuenta y realizá tus compras de
+                            forma rápida, segura y sin complicaciones.
+                        </p>
+
+                        <button class="boton"
+                                type="submit"
+                                disabled="@cargando">
+                            @(cargando ? "Ingresando..." : "Iniciar Sesion")
+                        </button>
+                    </fieldset>
+                </EditForm>
+
+                <div class="registro-acceso">
+                    <p>¿Todavía no tienes una cuenta?</p>
+
+                    <a class="boton" href="registro">
+                        Registrarse
+                    </a>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private LoginSolicitud modelo = new();
+    private bool cargando;
+    private string? error;
+
+    private async Task IngresarAsync()
+    {
+        if (cargando)
+            return;
+
+        cargando = true;
+        error = null;
+
+        try
+        {
+            var resultado = await Sesion.IniciarSesionAsync(modelo);
+
+            if (!resultado.Exito)
+            {
+                error = resultado.Mensaje;
+                return;
+            }
+
+            modelo = new();
+
+            Nav.NavigateTo(
+                Sesion.RutaInicio,
+                replace: true);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private void CerrarSesion()
+    {
+        Sesion.CerrarSesion();
+        modelo = new();
+        error = null;
+    }
+}

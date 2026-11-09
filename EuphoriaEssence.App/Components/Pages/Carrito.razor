@@ -1,0 +1,540 @@
+﻿@page "/carrito"
+
+@using System.Globalization
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Mi carrito | Euphoria Essence</PageTitle>
+
+<section class="carrito-page">
+    <header class="cabecera">
+        <a class="perfil-icono"
+           href="perfil"
+           aria-label="Mi perfil">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect width="24" height="24" fill="#eeeeee" />
+                <circle cx="12" cy="12" r="11" fill="#08618a" />
+                <circle cx="12" cy="8" r="4" fill="white" />
+                <path d="M4 21a8 8 0 0 1 16 0" fill="white" />
+            </svg>
+        </a>
+
+        <h1>Euphoria Essence</h1>
+    </header>
+
+    <div class="titulo-carrito">
+        <h2>Mi Carrito</h2>
+
+        <a href="catalogo" aria-label="Volver al catálogo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2 4h3l3 12h11l3-10" />
+                <path d="M7 8h13" />
+                <circle cx="10" cy="21" r="1" />
+                <circle cx="18" cy="21" r="1" />
+            </svg>
+        </a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(exito))
+    {
+        <div class="notificacion" role="status">
+            <p>@exito</p>
+
+            @if (pedidoRealizado)
+            {
+                <a href="pedidos">Ver mis pedidos</a>
+            }
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="mensaje-error" role="alert">
+            <p>@error</p>
+        </div>
+    }
+
+    @if (!Sesion.EstaLogueado)
+    {
+        <div class="estado">
+            <p>Iniciá sesión para consultar tu carrito.</p>
+            <a class="boton" href="login">Iniciar sesión</a>
+        </div>
+    }
+    else if (Sesion.Usuario?.Rol != "Cliente")
+    {
+        <p class="estado">
+            El carrito está disponible para cuentas Cliente.
+        </p>
+    }
+    else if (cargando)
+    {
+        <p class="estado" role="status">Cargando carrito...</p>
+    }
+    else if (carrito is null)
+    {
+        <button class="boton" @onclick="RecargarAsync">
+            Volver a consultar
+        </button>
+    }
+    else if (carrito.Items.Count == 0)
+    {
+        <div class="estado">
+            <p>Tu carrito está vacío.</p>
+            <a class="boton" href="catalogo">Seguir comprando</a>
+        </div>
+    }
+    else
+    {
+        <div class="productos">
+            @foreach (var item in carrito.Items)
+            {
+                <article class="producto" @key="item.IdProducto">
+                    <div class="imagen">
+                        @if (!string.IsNullOrWhiteSpace(item.Imagen))
+                        {
+                            <img src="@UrlImagen(item.Imagen)"
+                                 alt="@item.Nombre" />
+                        }
+                        else
+                        {
+                            <span>Sin imagen</span>
+                        }
+                    </div>
+
+                    <div class="datos">
+                        <p class="marca">@item.Marca</p>
+                        <h3>@item.Nombre</h3>
+                        <p>@item.TamanoMl ml</p>
+
+                        <div class="cantidad">
+                            <button type="button"
+                                    disabled="@(ocupado || item.Cantidad <= 1)"
+                                    aria-label="@($"Restar una unidad de {item.Nombre}")"
+                                    @onclick="() => CambiarAsync(item, -1)">
+                                [−]
+                            </button>
+
+                            <span>@item.Cantidad</span>
+
+                            <button type="button"
+                                    disabled="@(ocupado || item.Cantidad >= item.Stock)"
+                                    aria-label="@($"Sumar una unidad de {item.Nombre}")"
+                                    @onclick="() => CambiarAsync(item, 1)">
+                                [+]
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="acciones">
+                        <p class="precio">@Moneda(item.Subtotal)</p>
+
+                        <button class="eliminar"
+                                type="button"
+                                disabled="@ocupado"
+                                @onclick="() => PedirEliminar(item)">
+                            Eliminar
+                        </button>
+                    </div>
+
+                    @if (!item.Disponible)
+                    {
+                        <p class="aviso-stock">
+                            No disponible en la cantidad seleccionada.
+                            Stock actual: @item.Stock.
+                        </p>
+                    }
+                </article>
+            }
+        </div>
+
+        <div class="total">
+            <strong>Total:</strong>
+            <span>@Moneda(carrito.Total)</span>
+        </div>
+
+        @if (!carrito.PuedeComprar)
+        {
+            <p class="aviso-stock">
+                Revisá los perfumes sin disponibilidad antes de comprar.
+            </p>
+        }
+
+        @if (compraIncierta)
+        {
+            <a class="boton" href="pedidos">
+                Revisar mis pedidos
+            </a>
+        }
+        else
+        {
+            <button class="boton realizar-pedido"
+                    type="button"
+                    disabled="@(ocupado || !carrito.PuedeComprar)"
+                    @onclick="AbrirCompra">
+                Realizar Pedido
+            </button>
+        }
+    }
+
+    @if (confirmacion is not null)
+    {
+        <div class="fondo-dialogo">
+            <section class="dialogo"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="eliminar-titulo">
+                <h3 id="eliminar-titulo">@confirmacion</h3>
+
+                <div class="botones-dialogo">
+                    <button class="boton"
+                            type="button"
+                            @onclick="CancelarConfirmacion">
+                        Cancelar
+                    </button>
+
+                    <button class="boton"
+                            type="button"
+                            @onclick="ConfirmarEliminacionAsync">
+                        Confirmar
+                    </button>
+                </div>
+            </section>
+        </div>
+    }
+
+    @if (mostrarCompra && carrito is not null)
+    {
+        <div class="fondo-dialogo">
+            <section class="dialogo"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="pedido-titulo">
+                <h3 id="pedido-titulo">Confirmar pedido</h3>
+
+                <p>Total: @Moneda(carrito.Total)</p>
+
+                <label for="direccion-envio">
+                    Dirección de envío
+                </label>
+
+                <textarea id="direccion-envio"
+                          rows="3"
+                          maxlength="200"
+                          placeholder="Calle, altura, localidad, provincia y código postal"
+                          @bind="direccion">
+                </textarea>
+
+                @if (!string.IsNullOrWhiteSpace(errorDireccion))
+                {
+                    <p class="aviso-stock" role="alert">
+                        @errorDireccion
+                    </p>
+                }
+
+                <div class="botones-dialogo">
+                    <button class="boton"
+                            type="button"
+                            @onclick="CerrarCompra">
+                        Cancelar
+                    </button>
+
+                    <button class="boton"
+                            type="button"
+                            @onclick="ComprarAsync">
+                        Confirmar pedido
+                    </button>
+                </div>
+            </section>
+        </div>
+    }
+</section>
+
+@code {
+    private readonly CultureInfo cultura =
+        CultureInfo.GetCultureInfo("es-AR");
+
+    private CarritoRespuesta? carrito;
+    private bool cargando;
+    private bool ocupado;
+    private bool mostrarCompra;
+    private bool pedidoRealizado;
+    private bool compraIncierta;
+    private string? error;
+    private string? exito;
+    private string? confirmacion;
+    private int? productoEliminar;
+    private string direccion = string.Empty;
+    private string? errorDireccion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Sesion.EstaLogueado && Sesion.Usuario?.Rol == "Cliente")
+            await RecargarAsync();
+    }
+
+    private string Moneda(decimal valor) =>
+        valor.ToString("C2", cultura);
+
+    private string UrlImagen(string ruta) =>
+        new Uri(Http.BaseAddress!, ruta).AbsoluteUri;
+
+    private bool ComprobarSesion()
+    {
+        if (Sesion.EstaLogueado)
+            return true;
+
+        Sesion.CerrarSesion();
+        Nav.NavigateTo("/login");
+        return false;
+    }
+
+    private async Task RecargarAsync()
+    {
+        if (cargando || !ComprobarSesion())
+            return;
+
+        cargando = true;
+        carrito = null;
+
+        try
+        {
+            using var respuesta = await Http.GetAsync("api/carrito");
+
+            if (!await ValidarAsync(respuesta))
+                return;
+
+            carrito = await respuesta.Content
+                .ReadFromJsonAsync<CarritoRespuesta>();
+
+            if (carrito is null)
+                error = "El servidor devolvió una respuesta vacía.";
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo consultar el carrito.";
+        }
+        catch (OperationCanceledException)
+        {
+            error = "La consulta tardó demasiado.";
+        }
+        catch (JsonException)
+        {
+            error = "No se pudo interpretar el carrito.";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task<bool> ValidarAsync(HttpResponseMessage respuesta)
+    {
+        if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            Sesion.CerrarSesion();
+            Nav.NavigateTo("/login");
+            return false;
+        }
+
+        if (respuesta.IsSuccessStatusCode)
+            return true;
+
+        error = respuesta.StatusCode == HttpStatusCode.Forbidden
+            ? "Tu cuenta no tiene permiso para realizar esta operación."
+            : "No se pudo completar la operación.";
+
+        try
+        {
+            using var documento = await JsonDocument.ParseAsync(
+                await respuesta.Content.ReadAsStreamAsync());
+
+            var raiz = documento.RootElement;
+
+            if (raiz.ValueKind == JsonValueKind.Object &&
+                raiz.TryGetProperty("mensaje", out var mensaje) &&
+                mensaje.ValueKind == JsonValueKind.String)
+            {
+                error = mensaje.GetString() ?? error;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return false;
+    }
+
+    private Task CambiarAsync(CarritoItem item, int diferencia)
+    {
+        var cantidad = item.Cantidad + diferencia;
+
+        if (cantidad < 1 || cantidad > item.Stock)
+            return Task.CompletedTask;
+
+        return ModificarAsync(
+            () => Http.PutAsJsonAsync(
+                $"api/carrito/items/{item.IdProducto}",
+                new { cantidad }),
+            "Cantidad actualizada correctamente.");
+    }
+
+    private void PedirEliminar(CarritoItem item)
+    {
+        if (ocupado)
+            return;
+
+        productoEliminar = item.IdProducto;
+        confirmacion = "¿Desea eliminar el perfume?";
+    }
+
+    private void CancelarConfirmacion()
+    {
+        confirmacion = null;
+        productoEliminar = null;
+    }
+
+    private async Task ConfirmarEliminacionAsync()
+    {
+        if (!productoEliminar.HasValue)
+            return;
+
+        var id = productoEliminar.Value;
+        CancelarConfirmacion();
+
+        await ModificarAsync(
+            () => Http.DeleteAsync($"api/carrito/items/{id}"),
+            "Perfume eliminado del carrito");
+    }
+
+    private async Task ModificarAsync(
+        Func<Task<HttpResponseMessage>> enviar,
+        string mensaje)
+    {
+        if (ocupado || !ComprobarSesion())
+            return;
+
+        ocupado = true;
+        error = null;
+        exito = null;
+        pedidoRealizado = false;
+
+        try
+        {
+            using var respuesta = await enviar();
+
+            if (await ValidarAsync(respuesta))
+                exito = mensaje;
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo confirmar el cambio. Revisá el carrito.";
+        }
+        catch (OperationCanceledException)
+        {
+            error = "La operación tardó demasiado. Revisá el carrito.";
+        }
+        finally
+        {
+            try
+            {
+                if (Sesion.EstaLogueado)
+                    await RecargarAsync();
+            }
+            finally
+            {
+                ocupado = false;
+            }
+        }
+    }
+
+    private void AbrirCompra()
+    {
+        if (ocupado || compraIncierta || carrito?.PuedeComprar != true)
+            return;
+
+        errorDireccion = null;
+        mostrarCompra = true;
+    }
+
+    private void CerrarCompra()
+    {
+        mostrarCompra = false;
+        errorDireccion = null;
+    }
+
+    private async Task ComprarAsync()
+    {
+        if (ocupado || compraIncierta ||
+            carrito?.PuedeComprar != true || !ComprobarSesion())
+            return;
+
+        if (string.IsNullOrWhiteSpace(direccion))
+        {
+            errorDireccion = "Ingresá la dirección de envío.";
+            return;
+        }
+
+        ocupado = true;
+        mostrarCompra = false;
+        error = null;
+        exito = null;
+        pedidoRealizado = false;
+
+        try
+        {
+            using var respuesta = await Http.PostAsJsonAsync(
+                "api/pedidos",
+                new { direccionEnvio = direccion.Trim() });
+
+            if (await ValidarAsync(respuesta))
+            {
+                pedidoRealizado = true;
+                exito = "Pedido realizado con éxito";
+                direccion = string.Empty;
+            }
+            else if ((int)respuesta.StatusCode >= 500)
+            {
+                compraIncierta = true;
+                error =
+                    "El servidor no pudo confirmar el resultado. " +
+                    "Revisá tus pedidos antes de volver a comprar.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            compraIncierta = true;
+            error =
+                "No se pudo confirmar la respuesta. " +
+                "Revisá tus pedidos antes de volver a comprar.";
+        }
+        catch (OperationCanceledException)
+        {
+            compraIncierta = true;
+            error =
+                "La operación tardó demasiado. " +
+                "Revisá tus pedidos antes de volver a comprar.";
+        }
+        finally
+        {
+            try
+            {
+                if (Sesion.EstaLogueado)
+                    await RecargarAsync();
+            }
+            finally
+            {
+                ocupado = false;
+            }
+        }
+    }
+}

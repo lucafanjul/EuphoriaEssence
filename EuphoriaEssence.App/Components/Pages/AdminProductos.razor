@@ -1,0 +1,589 @@
+﻿@page "/admin/productos"
+
+@using System.Globalization
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Gestionar perfumes | Euphoria Essence</PageTitle>
+
+<section class="admin-page">
+    <header class="cabecera">
+        <a href="perfil" aria-label="Mi perfil">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect width="24" height="24" fill="#eeeeee" />
+                <circle cx="12" cy="12" r="11" fill="#08618a" />
+                <circle cx="12" cy="8" r="4" fill="white" />
+                <path d="M4 21a8 8 0 0 1 16 0" fill="white" />
+            </svg>
+        </a>
+
+        <h1>Euphoria Essence</h1>
+    </header>
+
+    @if (!Sesion.EstaLogueado)
+    {
+        <div class="estado">
+            <p>Iniciá sesión para continuar.</p>
+            <a class="boton" href="login">Iniciar sesión</a>
+        </div>
+    }
+    else if (!TieneAcceso)
+    {
+        <p class="estado" role="alert">
+            Esta sección es exclusiva del administrador.
+        </p>
+    }
+    else
+    {
+        <form class="buscador"
+              @onsubmit="BuscarAsync"
+              @onsubmit:preventDefault>
+            <button type="submit"
+                    disabled="@Ocupado"
+                    aria-label="Buscar perfumes">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="10" cy="10" r="7" />
+                    <path d="m15 15 6 6" />
+                </svg>
+            </button>
+
+            <input type="search"
+                   placeholder="Buscar perfumes..."
+                   aria-label="Buscar perfume o marca"
+                   @bind="buscar"
+                   @bind:event="oninput" />
+        </form>
+
+        <div class="filtros"
+             role="group"
+             tabindex="0"
+             aria-label="Marcas. Deslizá para ver más.">
+            <button class="filtro etiqueta"
+                    disabled="@Ocupado"
+                    aria-pressed="@(idMarca is null)"
+                    @onclick="() => MarcaAsync(null)">
+                Marca
+            </button>
+
+            @foreach (var marca in marcas)
+            {
+                <button class="@ClaseFiltro(idMarca == marca.IdMarca)"
+                        disabled="@Ocupado"
+                        aria-pressed="@(idMarca == marca.IdMarca)"
+                        @onclick="() => MarcaAsync(marca.IdMarca)">
+                    @marca.NombreMarca
+                </button>
+            }
+        </div>
+
+        <div class="filtros"
+             role="group"
+             tabindex="0"
+             aria-label="Categorías. Deslizá para ver más.">
+            <button class="filtro etiqueta"
+                    disabled="@Ocupado"
+                    aria-pressed="@(idCategoria is null)"
+                    @onclick="() => CategoriaAsync(null)">
+                Categoría
+            </button>
+
+            @foreach (var categoria in categorias)
+            {
+                <button class="@ClaseFiltro(idCategoria == categoria.IdCategoria)"
+                        disabled="@Ocupado"
+                        aria-pressed="@(idCategoria == categoria.IdCategoria)"
+                        @onclick="() => CategoriaAsync(categoria.IdCategoria)">
+                    @categoria.NombreCategoria
+                </button>
+            }
+        </div>
+
+        <div class="herramientas">
+            <a class="pastilla" href="admin/productos/nuevo">
+                Agregar Perfume +
+            </a>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(avisoFiltros))
+        {
+            <div class="aviso" role="status">
+                <p>@avisoFiltros</p>
+
+                <button type="button"
+                        disabled="@Ocupado"
+                        @onclick="RecargarTodoAsync">
+                    Reintentar filtros
+                </button>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="error" role="alert">
+                <p>@error</p>
+
+                <button type="button"
+                        disabled="@Ocupado"
+                        @onclick="CargarAsync">
+                    Actualizar listado
+                </button>
+            </div>
+        }
+
+        @if (Ocupado)
+        {
+            <p class="estado" role="status">
+                Cargando perfumes...
+            </p>
+        }
+        else if (listado is not null)
+        {
+            @if (listado.Items.Count == 0)
+            {
+                <p class="estado">
+                    No encontramos perfumes con esos filtros.
+                </p>
+            }
+
+            <div class="productos">
+                @foreach (var perfume in listado.Items)
+                {
+                    <article class="producto" @key="perfume.IdProducto">
+                        <div class="imagen">
+                            @if (!string.IsNullOrWhiteSpace(perfume.ImagenPrincipal))
+                            {
+                                <img src="@UrlImagen(perfume.ImagenPrincipal)"
+                                     alt="@perfume.Nombre"
+                                     loading="lazy" />
+                            }
+                            else
+                            {
+                                <span>Sin imagen</span>
+                            }
+                        </div>
+
+                        <div class="datos">
+                            <p class="marca">@perfume.Marca</p>
+                            <h2>@perfume.Nombre</h2>
+                            <p>@perfume.Categoria</p>
+                            <p>Cantidad: @perfume.Stock</p>
+
+                            @if (!perfume.Activo)
+                            {
+                                <p class="retirado">
+                                    Retirado del catálogo
+                                </p>
+                            }
+                        </div>
+
+                        <div class="acciones">
+                            <p class="precio">
+                                @Moneda(perfume.Precio)
+                            </p>
+
+                            <div class="editar-eliminar">
+                                <a class="editar"
+                                   href="@($"admin/productos/{perfume.IdProducto}/editar")">
+                                    Editar
+                                </a>
+
+                                @if (perfume.Activo)
+                                {
+                                    <button class="papelera"
+                                            type="button"
+                                            disabled="@Ocupado"
+                                            aria-label="@($"Retirar {perfume.Nombre} del catálogo")"
+                                            title="Retirar del catálogo"
+                                            @onclick="() => AbrirBaja(perfume)">
+                                        <svg viewBox="0 0 24 24"
+                                             aria-hidden="true">
+                                            <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
+                                        </svg>
+                                    </button>
+                                }
+                            </div>
+
+                            @if (perfume.Activo)
+                            {
+                                <a class="ver-detalles"
+                                   href="@($"perfumes/{perfume.IdProducto}")">
+                                    Ver Detalles
+                                </a>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+
+            @if (listado.TotalPaginas > 1)
+            {
+                <div class="paginacion">
+                    <button type="button"
+                            disabled="@(Ocupado || pagina <= 1)"
+                            @onclick="AnteriorAsync">
+                        Anterior
+                    </button>
+
+                    <span>
+                        @listado.Pagina / @listado.TotalPaginas
+                    </span>
+
+                    <button type="button"
+                            disabled="@(Ocupado || pagina >= listado.TotalPaginas)"
+                            @onclick="SiguienteAsync">
+                        Siguiente
+                    </button>
+                </div>
+            }
+        }
+    }
+</section>
+
+@code {
+    private readonly CultureInfo cultura =
+        CultureInfo.GetCultureInfo("es-AR");
+
+    private PaginaAdminProductos? listado;
+    private List<MarcaFiltro> marcas = new();
+    private List<CategoriaFiltro> categorias = new();
+
+    private string buscar = string.Empty;
+    private string busquedaAplicada = string.Empty;
+
+    private int? idMarca;
+    private int? idCategoria;
+    private int pagina = 1;
+
+    private bool cargando;
+    private bool cargandoFiltros;
+
+    private string? error;
+    private string? avisoFiltros;
+
+    private bool Ocupado => cargando || cargandoFiltros;
+
+    private bool TieneAcceso =>
+        Sesion.EstaLogueado &&
+        Sesion.Usuario?.Rol == "Administrador";
+
+    protected override Task OnInitializedAsync()
+    {
+        return RecargarTodoAsync();
+    }
+
+    private string Moneda(decimal valor) =>
+        valor.ToString("C2", cultura);
+
+    private string UrlImagen(string ruta) =>
+        new Uri(Http.BaseAddress!, ruta).AbsoluteUri;
+
+    private static string ClaseFiltro(bool seleccionado) =>
+        seleccionado ? "filtro seleccionado" : "filtro";
+
+    private async Task RecargarTodoAsync()
+    {
+        if (Ocupado || !TieneAcceso)
+            return;
+
+        cargandoFiltros = true;
+        avisoFiltros = null;
+
+        try
+        {
+            marcas = await Http.GetFromJsonAsync<List<MarcaFiltro>>(
+                "api/catalogo/marcas") ?? new();
+
+            categorias = await Http.GetFromJsonAsync<List<CategoriaFiltro>>(
+                "api/catalogo/categorias") ?? new();
+        }
+        catch (HttpRequestException)
+        {
+            avisoFiltros =
+                "No se pudieron cargar todos los filtros.";
+        }
+        catch (OperationCanceledException)
+        {
+            avisoFiltros =
+                "La consulta de filtros tardó demasiado.";
+        }
+        catch (JsonException)
+        {
+            avisoFiltros =
+                "No se pudieron interpretar los filtros.";
+        }
+        finally
+        {
+            cargandoFiltros = false;
+        }
+
+        await CargarAsync();
+    }
+
+    private async Task BuscarAsync()
+    {
+        if (Ocupado)
+            return;
+
+        busquedaAplicada = buscar.Trim();
+        pagina = 1;
+
+        await CargarAsync();
+    }
+
+    private async Task MarcaAsync(int? id)
+    {
+        if (Ocupado)
+            return;
+
+        idMarca = idMarca == id ? null : id;
+        busquedaAplicada = buscar.Trim();
+        pagina = 1;
+
+        await CargarAsync();
+    }
+
+    private async Task CategoriaAsync(int? id)
+    {
+        if (Ocupado)
+            return;
+
+        idCategoria = idCategoria == id ? null : id;
+        busquedaAplicada = buscar.Trim();
+        pagina = 1;
+
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        if (Ocupado || !TieneAcceso)
+            return;
+
+        cargando = true;
+        error = null;
+        listado = null;
+
+        try
+        {
+            var todos = new List<AdminProducto>();
+
+            var paginaApi = 1;
+            var totalPaginasApi = 1;
+
+            // Usamos la API publicada sin modificarla.
+            do
+            {
+                using var respuesta = await Http.GetAsync(
+                    $"api/admin/productos?pagina={paginaApi}&tamanoPagina=50");
+
+                if (!await ValidarAsync(respuesta))
+                    return;
+
+                var datos = await respuesta.Content
+                    .ReadFromJsonAsync<PaginaAdminProductos>();
+
+                if (datos is null)
+                {
+                    error = "El servidor devolvió una respuesta vacía.";
+                    return;
+                }
+
+                todos.AddRange(datos.Items);
+
+                totalPaginasApi = datos.TotalPaginas;
+                paginaApi++;
+            }
+            while (paginaApi <= totalPaginasApi);
+
+            IEnumerable<AdminProducto> consulta = todos
+                .DistinctBy(p => p.IdProducto);
+
+            if (!string.IsNullOrWhiteSpace(busquedaAplicada))
+            {
+                consulta = consulta.Where(p =>
+                    p.Nombre.Contains(
+                        busquedaAplicada,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    p.Marca.Contains(
+                        busquedaAplicada,
+                        StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (idMarca.HasValue)
+            {
+                consulta = consulta.Where(p =>
+                    p.IdMarca == idMarca.Value);
+            }
+
+            if (idCategoria.HasValue)
+            {
+                consulta = consulta.Where(p =>
+                    p.IdCategoria == idCategoria.Value);
+            }
+
+            var filtrados = consulta
+                .OrderBy(
+                    p => p.Nombre,
+                    StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(p => p.IdProducto)
+                .ToList();
+
+            const int tamanoPagina = 10;
+
+            var totalPaginas = (int)Math.Ceiling(
+                (double)filtrados.Count / tamanoPagina);
+
+            pagina = Math.Clamp(
+                pagina,
+                1,
+                Math.Max(1, totalPaginas));
+
+            var visibles = filtrados
+                .Skip((pagina - 1) * tamanoPagina)
+                .Take(tamanoPagina)
+                .ToList();
+
+            await Task.WhenAll(
+                visibles.Select(CargarImagenAsync));
+
+            listado = new PaginaAdminProductos
+            {
+                Pagina = pagina,
+                TotalPaginas = totalPaginas,
+                TotalRegistros = filtrados.Count,
+                Items = visibles
+            };
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+            error = "La consulta tardó demasiado.";
+        }
+        catch (JsonException)
+        {
+            error = "No se pudo interpretar el listado.";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task CargarImagenAsync(AdminProducto perfume)
+    {
+        if (!perfume.Activo ||
+            !string.IsNullOrWhiteSpace(perfume.ImagenPrincipal))
+        {
+            return;
+        }
+
+        try
+        {
+            using var respuesta = await Http.GetAsync(
+                $"api/productos/{perfume.IdProducto}");
+
+            if (!respuesta.IsSuccessStatusCode)
+                return;
+
+            var detalle = await respuesta.Content
+                .ReadFromJsonAsync<PerfumeDetalleRespuesta>();
+
+            perfume.ImagenPrincipal = detalle?.Imagenes
+                .OrderByDescending(i => i.EsPrincipal)
+                .FirstOrDefault()?.UrlImagen;
+        }
+        catch (HttpRequestException)
+        {
+            // Se muestra el producto aunque falle su imagen.
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (JsonException)
+        {
+        }
+    }
+
+    private void AbrirBaja(AdminProducto perfume)
+    {
+        if (Ocupado || !TieneAcceso || !perfume.Activo)
+            return;
+
+        Nav.NavigateTo(
+            $"/perfumes/{perfume.IdProducto}?eliminar=true");
+    }
+
+    private async Task<bool> ValidarAsync(
+        HttpResponseMessage respuesta)
+    {
+        if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            Sesion.CerrarSesion();
+            Nav.NavigateTo("/login", replace: true);
+            return false;
+        }
+
+        if (respuesta.IsSuccessStatusCode)
+            return true;
+
+        error = respuesta.StatusCode == HttpStatusCode.Forbidden
+            ? "No tenés permiso para gestionar perfumes."
+            : "No se pudo completar la operación.";
+
+        try
+        {
+            using var documento = await JsonDocument.ParseAsync(
+                await respuesta.Content.ReadAsStreamAsync());
+
+            var raiz = documento.RootElement;
+
+            if (raiz.ValueKind == JsonValueKind.Object &&
+                raiz.TryGetProperty("mensaje", out var mensaje) &&
+                mensaje.ValueKind == JsonValueKind.String)
+            {
+                error = mensaje.GetString() ?? error;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return false;
+    }
+
+    private async Task AnteriorAsync()
+    {
+        if (Ocupado || pagina <= 1)
+            return;
+
+        pagina--;
+
+        await CargarAsync();
+    }
+
+    private async Task SiguienteAsync()
+    {
+        if (Ocupado ||
+            listado is null ||
+            pagina >= listado.TotalPaginas)
+        {
+            return;
+        }
+
+        pagina++;
+
+        await CargarAsync();
+    }
+}

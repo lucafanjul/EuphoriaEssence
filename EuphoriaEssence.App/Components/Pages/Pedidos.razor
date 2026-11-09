@@ -1,0 +1,298 @@
+﻿@page "/pedidos"
+@page "/pedidos/{Id:int}"
+
+@using System.Globalization
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Mis pedidos | Euphoria Essence</PageTitle>
+
+<section class="pedidos-page">
+    <header class="cabecera">
+        <a href="@(Id.HasValue ? "pedidos" : "catalogo")"
+           aria-label="Volver">
+            ‹
+        </a>
+        <h1>Euphoria Essence</h1>
+    </header>
+
+    <h2 class="titulo">
+        @(Id.HasValue ? $"Pedido #{Id}" : "Mis pedidos")
+    </h2>
+
+    @if (!Sesion.EstaLogueado)
+    {
+        <div class="estado">
+            <p>Iniciá sesión para consultar tus pedidos.</p>
+            <a class="boton" href="login">Iniciar sesión</a>
+        </div>
+    }
+    else if (Sesion.Usuario?.Rol != "Cliente")
+    {
+        <p class="estado">
+            Esta sección está disponible para cuentas Cliente.
+        </p>
+    }
+    else if (cargando)
+    {
+        <p class="estado" role="status">Cargando pedidos...</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="estado" role="alert">
+            <p>@error</p>
+            <button class="boton" @onclick="CargarAsync">
+                Reintentar
+            </button>
+        </div>
+    }
+    else if (Id.HasValue && detalle is not null)
+    {
+        <div class="resumen">
+            <span class="estado-pedido">@detalle.Estado</span>
+            <p>@Fecha(detalle.FechaPedido)</p>
+
+            <h3>Dirección de envío</h3>
+            <p class="direccion">@detalle.DireccionEnvio</p>
+        </div>
+
+        @foreach (var item in detalle.Items)
+        {
+            <article class="producto" @key="item.IdProducto">
+                <div class="imagen">
+                    @if (!string.IsNullOrWhiteSpace(item.Imagen))
+                    {
+                        <img src="@UrlImagen(item.Imagen)"
+                             alt="@item.Nombre" />
+                    }
+                    else
+                    {
+                        <span>Sin imagen</span>
+                    }
+                </div>
+
+                <div class="producto-datos">
+                    <h3>@item.Nombre</h3>
+                    <p>@item.TamanoMl ml</p>
+                    <p>Cantidad: @item.Cantidad</p>
+                    <p>Precio unitario: @Moneda(item.PrecioUnitario)</p>
+                    <strong>@Moneda(item.Subtotal)</strong>
+                </div>
+            </article>
+        }
+
+        <div class="total">
+            <strong>Total:</strong>
+            <span>@Moneda(detalle.Total)</span>
+        </div>
+
+        <button class="boton" @onclick="CargarAsync">
+            Actualizar estado
+        </button>
+
+        <a class="enlace" href="pedidos">Volver a mis pedidos</a>
+    }
+    else if (listado.Items.Count == 0)
+    {
+        <div class="estado">
+            <p>Todavía no realizaste pedidos.</p>
+            <a class="boton" href="catalogo">Ver catálogo</a>
+        </div>
+    }
+    else
+    {
+        @foreach (var pedido in listado.Items)
+        {
+            <article class="pedido" @key="pedido.IdPedido">
+                <div class="pedido-cabecera">
+                    <h3>Pedido #@pedido.IdPedido</h3>
+                    <span class="estado-pedido">@pedido.Estado</span>
+                </div>
+
+                <p class="fecha">@Fecha(pedido.FechaPedido)</p>
+                <p class="direccion">@pedido.DireccionEnvio</p>
+
+                <div class="pedido-pie">
+                    <strong>@Moneda(pedido.Total)</strong>
+
+                    <a class="ver-detalle"
+                       href="@($"pedidos/{pedido.IdPedido}")">
+                        Ver detalles
+                    </a>
+                </div>
+            </article>
+        }
+
+        <div class="paginacion">
+            <button disabled="@(pagina <= 1)"
+                    @onclick="AnteriorAsync">
+                Anterior
+            </button>
+
+            <span>@listado.Pagina / @listado.TotalPaginas</span>
+
+            <button disabled="@(pagina >= listado.TotalPaginas)"
+                    @onclick="SiguienteAsync">
+                Siguiente
+            </button>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    private readonly CultureInfo cultura =
+        CultureInfo.GetCultureInfo("es-AR");
+
+    private PaginaPedidos listado = new();
+    private PedidoDetalleRespuesta? detalle;
+    private string? error;
+    private bool cargando;
+    private int pagina = 1;
+    private int? ultimoId;
+    private int versionCarga;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ultimoId != Id)
+            pagina = 1;
+
+        ultimoId = Id;
+        await CargarAsync();
+    }
+
+    private string Moneda(decimal valor) =>
+        valor.ToString("C2", cultura);
+
+    private string Fecha(DateTime valor)
+    {
+        // La API guarda y devuelve las fechas en UTC.
+        var utc = DateTime.SpecifyKind(valor, DateTimeKind.Utc);
+
+        return new DateTimeOffset(utc)
+            .ToOffset(TimeSpan.FromHours(-3))
+            .ToString("dd/MM/yyyy HH:mm", cultura);
+    }
+
+    private string UrlImagen(string ruta) =>
+        new Uri(Http.BaseAddress!, ruta).AbsoluteUri;
+
+    private async Task CargarAsync()
+    {
+        var version = ++versionCarga;
+        error = null;
+        detalle = null;
+        cargando = false;
+
+        if (!Sesion.EstaLogueado || Sesion.Usuario?.Rol != "Cliente")
+            return;
+
+        cargando = true;
+
+        try
+        {
+            var ruta = Id.HasValue
+                ? $"api/pedidos/{Id.Value}"
+                : $"api/pedidos?pagina={pagina}&tamanoPagina=10";
+
+            using var respuesta = await Http.GetAsync(ruta);
+
+            if (version != versionCarga)
+                return;
+
+            if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Sesion.CerrarSesion();
+                Nav.NavigateTo("/login");
+                return;
+            }
+
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                error = respuesta.StatusCode == HttpStatusCode.NotFound
+                    ? "El pedido no existe o no pertenece a tu cuenta."
+                    : "No se pudieron consultar tus pedidos.";
+                return;
+            }
+
+            if (Id.HasValue)
+            {
+                var datos = await respuesta.Content
+                    .ReadFromJsonAsync<PedidoDetalleRespuesta>();
+
+                if (version != versionCarga)
+                    return;
+
+                detalle = datos;
+
+                if (detalle is null)
+                    error = "El servidor devolvió una respuesta vacía.";
+            }
+            else
+            {
+                var datos = await respuesta.Content
+                    .ReadFromJsonAsync<PaginaPedidos>();
+
+                if (version != versionCarga)
+                    return;
+
+                if (datos is null)
+                {
+                    error = "El servidor devolvió una respuesta vacía.";
+                    return;
+                }
+
+                listado = datos;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            if (version == versionCarga)
+                error = "No se pudo conectar con el servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+            if (version == versionCarga)
+                error = "La consulta tardó demasiado. Volvé a intentar.";
+        }
+        catch (JsonException)
+        {
+            if (version == versionCarga)
+                error = "No se pudo interpretar la respuesta del servidor.";
+        }
+        finally
+        {
+            if (version == versionCarga)
+                cargando = false;
+        }
+    }
+
+    private async Task AnteriorAsync()
+    {
+        if (cargando || pagina <= 1)
+            return;
+
+        pagina--;
+        await CargarAsync();
+    }
+
+    private async Task SiguienteAsync()
+    {
+        if (cargando || pagina >= listado.TotalPaginas)
+            return;
+
+        pagina++;
+        await CargarAsync();
+    }
+}

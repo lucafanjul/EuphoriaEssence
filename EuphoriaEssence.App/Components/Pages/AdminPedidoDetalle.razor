@@ -1,0 +1,207 @@
+﻿@page "/admin/pedidos/{Id:int}"
+
+@using System.Globalization
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Detalle de pedido | Euphoria Essence</PageTitle>
+
+<section class="detalle-page">
+    <header>
+        <a href="admin/pedidos">‹ Gestionar pedidos</a>
+        <h1>Euphoria Essence</h1>
+        <h2>Pedido #@Id</h2>
+    </header>
+
+    @if (!Sesion.EstaLogueado)
+    {
+        <p>Iniciá sesión para continuar.</p>
+        <a class="boton" href="login">Iniciar sesión</a>
+    }
+    else if (Sesion.Usuario?.Rol != "Administrador")
+    {
+        <p role="alert">Esta sección es exclusiva del administrador.</p>
+    }
+    else if (cargando)
+    {
+        <p class="estado" role="status">Cargando pedido...</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="error" role="alert">@error</div>
+
+        <button class="boton" @onclick="CargarAsync">
+            Reintentar
+        </button>
+    }
+    else if (pedido is not null)
+    {
+        <span class="estado-pedido">@pedido.Estado</span>
+
+        <p class="fecha">@Fecha(pedido.FechaPedido)</p>
+
+        <section class="bloque">
+            <h3>Cliente</h3>
+
+            <p>
+                @pedido.Cliente.Nombre @pedido.Cliente.Apellido
+            </p>
+
+            <p>@pedido.Cliente.Email</p>
+
+            <p>
+                @(string.IsNullOrWhiteSpace(pedido.Cliente.Telefono)
+                    ? "Teléfono no informado"
+                    : pedido.Cliente.Telefono)
+            </p>
+        </section>
+
+        <section class="bloque">
+            <h3>Dirección de envío</h3>
+            <p>@pedido.DireccionEnvio</p>
+        </section>
+
+        <section class="bloque">
+            <h3>Productos</h3>
+
+            @foreach (var item in pedido.Items)
+            {
+                <article class="producto" @key="item.IdProducto">
+                    <div>
+                        <p class="marca">@item.Marca</p>
+                        <h4>@item.Nombre</h4>
+                        <p>@item.TamanoMl ml</p>
+                        <p>Cantidad: @item.Cantidad</p>
+                        <p class="precio-unitario">
+                            Precio unitario: @Moneda(item.PrecioUnitario)
+                        </p>
+                    </div>
+
+                    <strong>@Moneda(item.Subtotal)</strong>
+                </article>
+            }
+        </section>
+
+        <div class="total">
+            <strong>Total:</strong>
+            <span>@Moneda(pedido.Total)</span>
+        </div>
+
+        <button class="boton" @onclick="CargarAsync">
+            Actualizar información
+        </button>
+
+        <a class="boton volver" href="admin/pedidos">
+            Volver a gestionar pedidos
+        </a>
+    }
+</section>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private readonly CultureInfo cultura =
+        CultureInfo.GetCultureInfo("es-AR");
+
+    private AdminPedidoDetalleRespuesta? pedido;
+    private string? error;
+    private bool cargando;
+    private int versionCarga;
+
+    protected override Task OnParametersSetAsync() => CargarAsync();
+
+    private string Moneda(decimal valor) =>
+        valor.ToString("C2", cultura);
+
+    private string Fecha(DateTime valor) =>
+        new DateTimeOffset(DateTime.SpecifyKind(valor, DateTimeKind.Utc))
+            .ToOffset(TimeSpan.FromHours(-3))
+            .ToString("dd/MM/yyyy HH:mm", cultura);
+
+    private async Task CargarAsync()
+    {
+        var version = ++versionCarga;
+
+        error = null;
+        pedido = null;
+        cargando = false;
+
+        if (!Sesion.EstaLogueado ||
+            Sesion.Usuario?.Rol != "Administrador")
+        {
+            return;
+        }
+
+        cargando = true;
+
+        try
+        {
+            using var respuesta = await Http.GetAsync(
+                $"api/admin/pedidos/{Id}");
+
+            if (version != versionCarga)
+                return;
+
+            if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Sesion.CerrarSesion();
+                Nav.NavigateTo("/login");
+                return;
+            }
+
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                error = respuesta.StatusCode switch
+                {
+                    HttpStatusCode.NotFound => "El pedido no existe.",
+                    HttpStatusCode.Forbidden =>
+                        "No tenés permiso para consultar este pedido.",
+                    _ => "No se pudo consultar el pedido."
+                };
+
+                return;
+            }
+
+            var datos = await respuesta.Content
+                .ReadFromJsonAsync<AdminPedidoDetalleRespuesta>();
+
+            if (version != versionCarga)
+                return;
+
+            pedido = datos;
+
+            if (pedido is null)
+                error = "El servidor devolvió una respuesta vacía.";
+        }
+        catch (HttpRequestException)
+        {
+            if (version == versionCarga)
+                error = "No se pudo conectar con el servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+            if (version == versionCarga)
+                error = "La consulta tardó demasiado.";
+        }
+        catch (JsonException)
+        {
+            if (version == versionCarga)
+                error = "No se pudo interpretar el pedido.";
+        }
+        finally
+        {
+            if (version == versionCarga)
+                cargando = false;
+        }
+    }
+}

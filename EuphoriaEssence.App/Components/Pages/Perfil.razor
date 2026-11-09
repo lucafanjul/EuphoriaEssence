@@ -1,0 +1,388 @@
+﻿@page "/perfil"
+
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using EuphoriaEssence.App.Services
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Mi perfil | Euphoria Essence</PageTitle>
+
+<section class="perfil-page">
+    <header>
+        <h1>Euphoria Essence</h1>
+        <h2>Mi Perfil</h2>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(exito))
+    {
+        <div class="notificacion" role="status">@exito</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="mensaje-error" role="alert">@error</div>
+    }
+
+    @if (!Sesion.EstaLogueado)
+    {
+        <div class="estado">
+            <p>Iniciá sesión para consultar tu perfil.</p>
+            <a class="boton" href="login">Iniciar sesión</a>
+        </div>
+    }
+    else if (cargando)
+    {
+        <p class="estado" role="status">Cargando perfil...</p>
+    }
+    else if (perfil is null)
+    {
+        <button class="boton"
+                type="button"
+                @onclick="CargarAsync">
+            Volver a consultar
+        </button>
+    }
+    else if (!editando)
+    {
+        <dl class="datos">
+            <dt>Nombre</dt>
+            <dd>@perfil.Nombre</dd>
+
+            <dt>Apellido</dt>
+            <dd>@perfil.Apellido</dd>
+
+            <dt>Correo Electronico</dt>
+            <dd>@perfil.Email</dd>
+
+            <dt>Teléfono</dt>
+            <dd>@Mostrar(perfil.Telefono)</dd>
+
+            <dt>Dirección</dt>
+            <dd>@Mostrar(perfil.Direccion)</dd>
+        </dl>
+
+        <div class="acciones">
+            @if (perfil.Rol == "Cliente")
+            {
+                <a class="boton" href="pedidos">
+                    Ver Mis Pedidos
+                </a>
+            }
+
+            @if (perfil.Rol == "Administrador")
+            {
+                <a class="boton" href="admin/productos">
+                    Gestionar perfumes
+                </a>
+
+                <a class="boton" href="admin/pedidos">
+                    Gestionar pedidos
+                </a>
+            }
+
+            <button class="boton"
+                    type="button"
+                    @onclick="Editar">
+                Editar Perfil
+            </button>
+
+            <button class="boton"
+                    type="button"
+                    @onclick="CerrarSesion">
+                Cerrar Sesión
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="perfil-edicion">
+            <EditForm Model="@modelo" OnValidSubmit="@GuardarAsync">
+                <DataAnnotationsValidator />
+
+                <fieldset disabled="@guardando">
+                    <div class="campo">
+                        <label for="perfil-nombre">Nombre</label>
+
+                        <InputText id="perfil-nombre"
+                                   autocomplete="given-name"
+                                   maxlength="100"
+                                   @bind-Value="modelo.Nombre" />
+
+                        <ValidationMessage For="@(() => modelo.Nombre)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="perfil-apellido">Apellido</label>
+
+                        <InputText id="perfil-apellido"
+                                   autocomplete="family-name"
+                                   maxlength="100"
+                                   @bind-Value="modelo.Apellido" />
+
+                        <ValidationMessage For="@(() => modelo.Apellido)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="perfil-telefono">Teléfono</label>
+
+                        <InputText id="perfil-telefono"
+                                   type="tel"
+                                   autocomplete="tel"
+                                   maxlength="30"
+                                   @bind-Value="modelo.Telefono" />
+
+                        <ValidationMessage For="@(() => modelo.Telefono)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="perfil-direccion">Dirección</label>
+
+                        <InputText id="perfil-direccion"
+                                   autocomplete="street-address"
+                                   maxlength="200"
+                                   @bind-Value="modelo.Direccion" />
+
+                        <ValidationMessage For="@(() => modelo.Direccion)" />
+                    </div>
+
+                    <button class="boton guardar-perfil"
+                            type="submit"
+                            disabled="@guardando">
+                        @(guardando ? "Guardando..." : "Guardar Cambios")
+                    </button>
+                </fieldset>
+            </EditForm>
+        </div>
+    }
+</section>
+
+@code {
+    private PerfilRespuesta? perfil;
+    private EditarPerfilSolicitud modelo = new();
+
+    private bool cargando;
+    private bool guardando;
+    private bool editando;
+
+    private string? error;
+    private string? exito;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Sesion.EstaLogueado)
+            await CargarAsync();
+    }
+
+    private static string Mostrar(string? valor) =>
+        string.IsNullOrWhiteSpace(valor) ? "Sin especificar" : valor;
+
+    private bool ComprobarSesion()
+    {
+        if (Sesion.EstaLogueado)
+            return true;
+
+        CerrarSesion();
+        return false;
+    }
+
+    private async Task CargarAsync()
+    {
+        if (cargando || !ComprobarSesion())
+            return;
+
+        cargando = true;
+        error = null;
+
+        try
+        {
+            using var respuesta = await Http.GetAsync("api/perfil");
+
+            if (!await ValidarAsync(respuesta))
+                return;
+
+            perfil = await respuesta.Content
+                .ReadFromJsonAsync<PerfilRespuesta>();
+
+            if (perfil is null)
+            {
+                error = "El servidor devolvió una respuesta vacía.";
+                return;
+            }
+
+            ActualizarSesion();
+        }
+        catch (HttpRequestException)
+        {
+            error = "No se pudo conectar con el servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+            error = "La consulta tardó demasiado.";
+        }
+        catch (JsonException)
+        {
+            error = "No se pudo interpretar el perfil.";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private void Editar()
+    {
+        if (perfil is null)
+            return;
+
+        modelo = new EditarPerfilSolicitud
+        {
+            Nombre = perfil.Nombre,
+            Apellido = perfil.Apellido,
+            Telefono = perfil.Telefono,
+            Direccion = perfil.Direccion
+        };
+
+        error = null;
+        exito = null;
+        editando = true;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (guardando || perfil is null || !ComprobarSesion())
+            return;
+
+        guardando = true;
+        error = null;
+        exito = null;
+
+        try
+        {
+            using var respuesta = await Http.PutAsJsonAsync(
+                "api/perfil",
+                modelo);
+
+            if (!await ValidarAsync(respuesta))
+                return;
+
+            perfil.Nombre = modelo.Nombre.Trim();
+            perfil.Apellido = modelo.Apellido.Trim();
+
+            perfil.Telefono = string.IsNullOrWhiteSpace(modelo.Telefono)
+                ? null
+                : modelo.Telefono.Trim();
+
+            perfil.Direccion = string.IsNullOrWhiteSpace(modelo.Direccion)
+                ? null
+                : modelo.Direccion.Trim();
+
+            ActualizarSesion();
+
+            editando = false;
+            exito = "Perfil actualizado correctamente.";
+        }
+        catch (HttpRequestException)
+        {
+            error =
+                "No se pudo confirmar el guardado. " +
+                "Volvé a consultar el perfil para comprobar los cambios.";
+        }
+        catch (OperationCanceledException)
+        {
+            error =
+                "La operación tardó demasiado. " +
+                "Volvé a consultar el perfil para comprobar los cambios.";
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void ActualizarSesion()
+    {
+        var usuario = Sesion.Usuario;
+
+        if (perfil is null || usuario is null)
+            return;
+
+        usuario.Nombre = perfil.Nombre;
+        usuario.Apellido = perfil.Apellido;
+    }
+
+    private async Task<bool> ValidarAsync(
+        HttpResponseMessage respuesta)
+    {
+        if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            CerrarSesion();
+            return false;
+        }
+
+        if (respuesta.IsSuccessStatusCode)
+            return true;
+
+        error = respuesta.StatusCode == HttpStatusCode.Forbidden
+            ? "No tenés permiso para realizar esta operación."
+            : "No se pudo completar la operación.";
+
+        try
+        {
+            using var documento = await JsonDocument.ParseAsync(
+                await respuesta.Content.ReadAsStreamAsync());
+
+            var raiz = documento.RootElement;
+
+            if (raiz.ValueKind != JsonValueKind.Object)
+                return false;
+
+            if (raiz.TryGetProperty("mensaje", out var mensaje) &&
+                mensaje.ValueKind == JsonValueKind.String)
+            {
+                error = mensaje.GetString() ?? error;
+            }
+            else if (raiz.TryGetProperty("errors", out var errores) &&
+                     errores.ValueKind == JsonValueKind.Object)
+            {
+                var mensajes = new List<string>();
+
+                foreach (var campo in errores.EnumerateObject())
+                {
+                    if (campo.Value.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    foreach (var item in campo.Value.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String &&
+                            item.GetString() is string texto)
+                        {
+                            mensajes.Add(texto);
+                        }
+                    }
+                }
+
+                if (mensajes.Count > 0)
+                    error = string.Join(" ", mensajes);
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return false;
+    }
+
+    private void CerrarSesion()
+    {
+        Sesion.CerrarSesion();
+        Nav.NavigateTo("/login", replace: true);
+    }
+}

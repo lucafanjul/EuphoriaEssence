@@ -1,0 +1,252 @@
+﻿@page "/registro"
+
+@using System.Net
+@using System.Net.Http.Json
+@using System.Text.Json
+@using EuphoriaEssence.App.Models
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+
+@inject HttpClient Http
+
+<PageTitle>Registrarse | Euphoria Essence</PageTitle>
+
+<section class="registro-page">
+    <div class="registro-contenido">
+        <header class="registro-header">
+            <h1>Euphoria Essence</h1>
+        </header>
+
+        @if (registrado)
+        {
+            <div class="registro-exito" role="status">
+                <h2>Cuenta creada correctamente</h2>
+
+                <p>
+                    Ya podés iniciar sesión con tu correo y contraseña.
+                </p>
+
+                <a class="boton-registro" href="login">
+                    Iniciar sesión
+                </a>
+            </div>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(error))
+            {
+                <div class="mensaje-error" role="alert">
+                    @error
+                </div>
+            }
+
+            <EditForm Model="@modelo" OnValidSubmit="@RegistrarAsync">
+                <DataAnnotationsValidator />
+
+                <fieldset disabled="@cargando">
+                    <div class="campo">
+                        <label for="registro-nombre">Nombre</label>
+
+                        <InputText id="registro-nombre"
+                                   autocomplete="given-name"
+                                   maxlength="100"
+                                   placeholder="Ingrese su Nombre..."
+                                   @bind-Value="modelo.Nombre" />
+
+                        <ValidationMessage For="@(() => modelo.Nombre)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="registro-apellido">Apellido</label>
+
+                        <InputText id="registro-apellido"
+                                   autocomplete="family-name"
+                                   maxlength="100"
+                                   placeholder="Ingrese su Apellido..."
+                                   @bind-Value="modelo.Apellido" />
+
+                        <ValidationMessage For="@(() => modelo.Apellido)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="registro-email">Correo Electronico</label>
+
+                        <InputText id="registro-email"
+                                   type="email"
+                                   autocomplete="email"
+                                   maxlength="150"
+                                   placeholder="Ingrese su mail..."
+                                   @bind-Value="modelo.Email" />
+
+                        <ValidationMessage For="@(() => modelo.Email)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="registro-password">Contraseña</label>
+
+                        <InputText id="registro-password"
+                                   type="password"
+                                   autocomplete="new-password"
+                                   maxlength="128"
+                                   placeholder="Ingrese su Contraseña..."
+                                   @bind-Value="modelo.Password" />
+
+                        <ValidationMessage For="@(() => modelo.Password)" />
+                    </div>
+
+                    <div class="campo">
+                        <label for="registro-telefono">Teléfono</label>
+
+                        <InputText id="registro-telefono"
+                                   type="tel"
+                                   autocomplete="tel"
+                                   maxlength="30"
+                                   placeholder="Ingrese su Número de Teléfono..."
+                                   @bind-Value="modelo.Telefono" />
+
+                        <ValidationMessage For="@(() => modelo.Telefono)" />
+                    </div>
+
+                    <div class="campo campo-direccion">
+                        <label for="registro-direccion">Dirección</label>
+
+                        <InputText id="registro-direccion"
+                                   autocomplete="street-address"
+                                   maxlength="200"
+                                   placeholder="Ingrese su Direccion..."
+                                   @bind-Value="modelo.Direccion" />
+
+                        <ValidationMessage For="@(() => modelo.Direccion)" />
+                    </div>
+
+                    <button class="boton-registro"
+                            type="submit"
+                            disabled="@cargando">
+                        @(cargando ? "Registrando..." : "Registrarse")
+                    </button>
+                </fieldset>
+            </EditForm>
+
+            <footer class="acceso-login">
+                <p>¿Ya tienes una cuenta creada?</p>
+                <a href="login">Iniciar Sesion</a>
+            </footer>
+        }
+    </div>
+</section>
+
+@code {
+    private RegistroSolicitud modelo = new();
+    private bool cargando;
+    private bool registrado;
+    private string? error;
+
+    private async Task RegistrarAsync()
+    {
+        if (cargando)
+            return;
+
+        cargando = true;
+        error = null;
+
+        try
+        {
+            var solicitud = new
+            {
+                nombre = modelo.Nombre.Trim(),
+                apellido = modelo.Apellido.Trim(),
+                email = modelo.Email.Trim(),
+                password = modelo.Password,
+                confirmarPassword = modelo.Password,
+                telefono = modelo.Telefono?.Trim(),
+                direccion = modelo.Direccion?.Trim()
+            };
+
+            using var respuesta = await Http.PostAsJsonAsync(
+                "api/auth/registro",
+                solicitud);
+
+            if (respuesta.IsSuccessStatusCode)
+            {
+                modelo = new();
+                registrado = true;
+                return;
+            }
+
+            error = await LeerErrorAsync(respuesta);
+        }
+        catch (HttpRequestException)
+        {
+            error =
+                "No se pudo confirmar el registro. " +
+                "Revisá tu conexión; si la cuenta se creó, podés iniciar sesión.";
+        }
+        catch (OperationCanceledException)
+        {
+            error =
+                "El servidor tardó demasiado. " +
+                "Intentá iniciar sesión antes de repetir el registro.";
+        }
+        catch (JsonException)
+        {
+            error = "No se pudo interpretar la respuesta del servidor.";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private static async Task<string> LeerErrorAsync(
+        HttpResponseMessage respuesta)
+    {
+        try
+        {
+            using var documento = await JsonDocument.ParseAsync(
+                await respuesta.Content.ReadAsStreamAsync());
+
+            var raiz = documento.RootElement;
+
+            if (raiz.ValueKind == JsonValueKind.Object)
+            {
+                if (raiz.TryGetProperty("mensaje", out var mensaje) &&
+                    mensaje.ValueKind == JsonValueKind.String)
+                {
+                    return mensaje.GetString()
+                        ?? "No se pudo crear la cuenta.";
+                }
+
+                if (raiz.TryGetProperty("errors", out var errores) &&
+                    errores.ValueKind == JsonValueKind.Object)
+                {
+                    var mensajes = new List<string>();
+
+                    foreach (var campo in errores.EnumerateObject())
+                    {
+                        if (campo.Value.ValueKind != JsonValueKind.Array)
+                            continue;
+
+                        foreach (var item in campo.Value.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.String &&
+                                item.GetString() is string texto)
+                            {
+                                mensajes.Add(texto);
+                            }
+                        }
+                    }
+
+                    if (mensajes.Count > 0)
+                        return string.Join(" ", mensajes);
+                }
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return respuesta.StatusCode == HttpStatusCode.Conflict
+            ? "Ya existe una cuenta con ese correo electrónico."
+            : "No se pudo crear la cuenta. Volvé a intentar.";
+    }
+}

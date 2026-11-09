@@ -1,0 +1,27 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Compilación
+**/bin/
+**/obj/
+
+# Configuración privada
+**/appsettings.Development.json
+.env
+.env.*
+
+# Perfiles de publicación
+**/PublishProfiles/
+
+# Certificados
+*.pfx
+*.p12
+*.keystore
+*.jks
+
+# Bases de datos
+*.bak
+*.mdf
+*.ldf

@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="EuphoriaEssence.Api/EuphoriaEssence.Api.csproj" />
+  <Project Path="EuphoriaEssence.App/EuphoriaEssence.App.csproj" Id="383d378d-9aac-4f04-847d-519bce6bfef9">
+    <Deploy Solution="Debug|*" />
+  </Project>
+</Solution>

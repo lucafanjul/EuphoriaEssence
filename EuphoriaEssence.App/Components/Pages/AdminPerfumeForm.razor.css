@@ -1,0 +1,266 @@
+.form-page {
+    width: 100%;
+    max-width: 390px;
+    min-height: 100dvh;
+    margin: auto;
+    padding: 14px 12px 30px;
+    background: #080808;
+    color: #eeeeee;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.cabecera {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+    .cabecera > a {
+        display: block;
+        flex: 0 0 25px;
+    }
+
+    .cabecera svg {
+        display: block;
+        width: 25px;
+        height: 25px;
+    }
+
+    .cabecera h1 {
+        flex: 1;
+        margin: 0;
+        padding-right: 25px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(21px, 5.7vw, 27px);
+        font-weight: 700;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.selector-imagen {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.imagen-boton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    min-height: 30px;
+    font-size: 23px;
+    cursor: pointer;
+}
+
+::deep .archivo-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.selector-imagen:focus-within .imagen-boton {
+    outline: 2px solid #eeeeee;
+    outline-offset: 2px;
+}
+
+.solo-lectores {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.nombre-archivo {
+    margin: 0 0 12px;
+    color: #bbbbbb;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.campo {
+    margin-bottom: 19px;
+}
+
+    .campo label {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.3;
+    }
+
+    .campo input,
+    .campo ::deep input,
+    .campo ::deep select {
+        display: block;
+        width: 100%;
+        min-height: 38px;
+        padding: 8px 14px;
+        border: 1px solid #aaaaaa;
+        border-radius: 8px;
+        background: #080808;
+        color: #eeeeee;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        line-height: 1.3;
+        box-shadow: none;
+    }
+
+        .campo ::deep input::placeholder {
+            color: #777777;
+            opacity: 1;
+        }
+
+        .campo input[readonly] {
+            color: #999999;
+        }
+
+        .campo input:focus,
+        .campo ::deep input:focus,
+        .campo ::deep select:focus {
+            outline: 1px solid #eeeeee;
+            outline-offset: 1px;
+        }
+
+    .campo ::deep .validation-message {
+        margin-top: 7px;
+        color: #ffb5b5;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+.boton {
+    display: block;
+    width: 100%;
+    padding: 11px 16px;
+    border: 0;
+    border-radius: 8px;
+    background: #eeeeee;
+    color: #080808;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.guardar {
+    width: auto;
+    min-width: 190px;
+    margin: 2px auto 0;
+    padding: 9px 24px;
+    border-radius: 24px;
+}
+
+.boton:disabled {
+    opacity: .5;
+    cursor: wait;
+}
+
+.volver {
+    margin-top: 22px;
+}
+
+.notificacion {
+    margin-bottom: 22px;
+    padding: 15px;
+    background: #ffffff;
+    color: #080808;
+    text-align: center;
+}
+
+.mensaje-error {
+    margin-bottom: 22px;
+    padding: 12px;
+    border: 1px solid #a75b5b;
+    border-radius: 8px;
+    background: #321818;
+    color: #ffcccc;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.ayuda {
+    margin-top: 9px;
+    color: #bbbbbb;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.estado {
+    padding: 30px 0;
+    text-align: center;
+}
+
+@media (max-width: 330px) {
+    .form-page {
+        padding-right: 9px;
+        padding-left: 9px;
+    }
+
+    .cabecera {
+        gap: 10px;
+    }
+
+        .cabecera h1 {
+            font-size: 21px;
+        }
+
+    .campo label,
+    .selector-imagen {
+        font-size: 12px;
+    }
+
+    .campo input,
+    .campo ::deep input,
+    .campo ::deep select {
+        min-height: 34px;
+        font-size: 12px;
+    }
+
+    .guardar {
+        min-width: 170px;
+        font-size: 13px;
+    }
+}
+.modo-edicion .campo input,
+.modo-edicion .campo ::deep input,
+.modo-edicion .campo ::deep select {
+    color: #999999;
+}
+
+    .modo-edicion .campo input:focus,
+    .modo-edicion .campo ::deep input:focus,
+    .modo-edicion .campo ::deep select:focus {
+        color: #eeeeee;
+    }
+
+    .modo-edicion .campo ::deep select option {
+        background: #080808;
+        color: #eeeeee;
+    }
+
+.modo-edicion .guardar {
+    min-width: 190px;
+    margin-top: 4px;
+    border-radius: 24px;
+}

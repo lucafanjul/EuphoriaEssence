@@ -1,0 +1,32 @@
+.app-contenido {
+    min-height: 100dvh;
+    background: #080808;
+    color: #f3f3f3;
+}
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    padding: 16px 40px 16px 16px;
+    background: #fff3cd;
+    color: #332701;
+    box-shadow: 0 -2px 8px rgb(0 0 0 / 20%);
+}
+
+    #blazor-error-ui .reload {
+        margin-left: 10px;
+        color: #332701;
+        text-decoration: underline;
+    }
+
+    #blazor-error-ui .dismiss {
+        position: absolute;
+        top: 12px;
+        right: 14px;
+        color: #332701;
+        cursor: pointer;
+    }

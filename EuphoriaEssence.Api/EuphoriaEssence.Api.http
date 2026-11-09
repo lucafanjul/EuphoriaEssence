@@ -1,0 +1,30 @@
+@baseUrl = https://localhost:7266
+@token = PEGAR_TOKEN_AQUI
+
+### Iniciar sesión
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "TU_CORREO",
+  "password": "TU_CONTRASENA"
+}
+
+### Consultar mi perfil
+GET {{baseUrl}}/api/perfil
+Authorization: Bearer {{token}}
+
+### Editar mi perfil
+PUT {{baseUrl}}/api/perfil
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nombre": "Nombre de prueba",
+  "apellido": "Apellido de prueba",
+  "telefono": "0000000000",
+  "direccion": "Dirección de prueba"
+}
+
+### Consultar perfil sin token
+GET {{baseUrl}}/api/perfil

@@ -1,0 +1,189 @@
+.pedidos-page {
+    width: 100%;
+    max-width: 520px;
+    min-height: 100dvh;
+    box-sizing: border-box;
+    margin: auto;
+    padding: 18px 18px 30px;
+    background: #080808;
+    color: #f3f3f3;
+    font-family: Arial, sans-serif;
+}
+
+.cabecera {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+    .cabecera a {
+        color: white;
+        font-size: 36px;
+        line-height: 1;
+        text-decoration: none;
+    }
+
+    .cabecera h1 {
+        margin: 0;
+        font-family: Georgia, serif;
+        font-size: clamp(22px, 6vw, 29px);
+        font-weight: 700;
+    }
+
+.titulo {
+    margin: 28px 0;
+    text-align: center;
+    font-size: 23px;
+}
+
+.pedido {
+    margin-bottom: 22px;
+    padding: 18px 0;
+    border-bottom: 1px solid #444;
+}
+
+.pedido-cabecera,
+.pedido-pie {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.pedido h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.estado-pedido {
+    display: inline-block;
+    padding: 6px 10px;
+    border: 1px solid #00b9cc;
+    border-radius: 18px;
+    color: #8fe7ef;
+    font-size: 12px;
+}
+
+.fecha {
+    margin-top: 14px;
+    color: #bbb;
+    font-size: 13px;
+}
+
+.direccion {
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+}
+
+.pedido-pie {
+    margin-top: 20px;
+}
+
+    .pedido-pie strong {
+        font-size: 21px;
+    }
+
+.ver-detalle,
+.boton,
+.paginacion button {
+    display: inline-block;
+    box-sizing: border-box;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 8px;
+    background: #eee;
+    color: #080808;
+    text-align: center;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.ver-detalle {
+    border-radius: 22px;
+}
+
+.boton {
+    width: 100%;
+    font-size: 16px;
+}
+
+.resumen {
+    margin-bottom: 28px;
+}
+
+    .resumen > p {
+        margin-top: 14px;
+    }
+
+    .resumen h3 {
+        margin-top: 24px;
+        font-size: 16px;
+    }
+
+.producto {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.imagen {
+    width: 80px;
+    height: 100px;
+    color: #aaa;
+    font-size: 12px;
+}
+
+    .imagen img {
+        width: 100%;
+        height: 100%;
+        border-radius: 8px;
+        object-fit: contain;
+    }
+
+.producto h3 {
+    margin: 0 0 10px;
+    font-size: 16px;
+    overflow-wrap: anywhere;
+}
+
+.producto p {
+    margin-bottom: 7px;
+    color: #ccc;
+    font-size: 13px;
+}
+
+.total {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 30px 0;
+    font-size: 22px;
+}
+
+.enlace {
+    display: block;
+    margin-top: 24px;
+    color: white;
+    text-align: center;
+}
+
+.estado {
+    padding: 30px 0;
+    text-align: center;
+}
+
+.paginacion {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-top: 28px;
+}
+
+button:disabled {
+    opacity: .45;
+    cursor: default;
+}
